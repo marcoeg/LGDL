@@ -1,0 +1,324 @@
+(*
+  LGDL Expanded Grammar - Language-Game Definition Language
+  Full version with practical extensions for real-world use
+
+  LGDL v1.0 — EBNF
+
+  Copyright (c) 2025 Graziano Labs Corp.
+*)
+
+(* ============================================================
+   PROGRAM STRUCTURE
+   ============================================================ *)
+
+<program> ::= {<comment>} {<game-definition>}
+
+<game-definition> ::= "game" <identifier> [<inheritance>] "{" 
+                        <game-body> 
+                     "}"
+
+<inheritance> ::= "extends" <identifier>
+
+<game-body> ::= {<game-section>}
+
+<game-section> ::= <description-section>
+                 | <participants-section>
+                 | <vocabulary-section>
+                 | <capabilities-section>
+                 | <moves-section>
+                 | <learning-section>
+
+(* ============================================================
+   GAME SECTIONS
+   ============================================================ *)
+
+(* Description - What this game does *)
+<description-section> ::= "description:" <text-value>
+
+(* Participants - Who can do what *)
+<participants-section> ::= "participants" "{" {<participant>} "}"
+
+<participant> ::= <identifier> "can do:" <action-spec>
+
+<action-spec> ::= "[" <action-list> "]"
+                | <dynamic-action>
+
+<dynamic-action> ::= "anything"
+                   | "actions matching" <pattern>
+
+<action-list> ::= <string> {"," <string>}
+
+(* Vocabulary - Alternative ways of saying things *)
+<vocabulary-section> ::= "vocabulary" "{" {<vocabulary-entry>} "}"
+
+<vocabulary-entry> ::= <pattern-spec> "also means:" "[" <pattern-spec-list> "]"
+
+<pattern-spec-list> ::= <pattern-spec> {"," <pattern-spec>}
+
+(* Capabilities - External systems and functions *)
+<capabilities-section> ::= "capabilities" "{" {<capability>} "}"
+
+<capability> ::= <identifier> ":" <capability-spec>
+
+<capability-spec> ::= "[" <function-list> "]"
+                    | <string>  # Natural description
+
+<function-list> ::= <function-name> {"," <function-name>}
+
+<function-name> ::= <identifier>
+
+(* ============================================================
+   MOVES SECTION - Core interactions
+   ============================================================ *)
+
+<moves-section> ::= "moves" "{" {<move-definition>} "}"
+
+<move-definition> ::= "move" <identifier> [<inheritance>] "{" 
+                        {<move-element>} 
+                     "}"
+
+<move-element> ::= <context-guard>
+                 | <trigger-clause>
+                 | <confidence-clause>
+                 | <when-clause>
+                 | <if-clause>
+
+(* Context guards - prerequisites *)
+<context-guard> ::= "requires context:" <context-list>
+
+<context-list> ::= <context-item> {"," <context-item>}
+
+<context-item> ::= ["not"] <identifier>
+                 | <identifier> <comparator> <value>
+                 | <identifier> "=" <value>
+
+(* Triggers with pattern modifiers *)
+<trigger-clause> ::= "when" <participant> "says something like:" "[" 
+                       <pattern-spec-list> 
+                    "]"
+
+<pattern-spec> ::= <pattern> [<pattern-modifier>]
+
+<pattern> ::= <string> | <text-block>
+
+<pattern-modifier> ::= "(" <modifier-list> ")"
+
+<modifier-list> ::= <modifier> {"," <modifier>}
+
+<modifier> ::= "strict"           # Exact matching
+             | "fuzzy"            # Loose semantic matching  
+             | "context-sensitive" # Consider conversation history
+             | "learned"          # Pattern learned from use
+
+(* Confidence specifications *)
+<confidence-clause> ::= "confidence needed:" <confidence-expr>
+                      | "confidence:" <confidence-expr>
+
+<confidence-expr> ::= <number>          # 0.0 to 1.0
+                    | "adaptive"        # Learn from outcomes
+                    | "high"           # ~0.8
+                    | "medium"         # ~0.5
+                    | "low"            # ~0.2
+                    | "critical"       # ~0.95
+                    | <identifier> "weighted by" <identifier>
+
+(* Conditional execution *)
+<when-clause> ::= "when" <condition> "{" 
+                    {<action>} 
+                 "}"
+
+<if-clause> ::= "if" <condition> "{" 
+                   {<action>} 
+                "}" 
+                {"else if" <condition> "{" {<action>} "}"}
+                ["else" "{" {<action>} "}"]
+
+(* ============================================================
+   CONDITIONS
+   ============================================================ *)
+
+<condition> ::= <simple-condition>
+              | <compound-condition>
+              | <special-condition>
+
+<simple-condition> ::= <value-ref>
+                     | <value-ref> <comparator> <value>
+                     | <value-ref> "is" <value>
+                     | <value-ref> "matches" <pattern>
+                     | "not" <simple-condition>
+
+<compound-condition> ::= <condition> <logical-op> <condition>
+                       | "(" <condition> ")"
+
+<logical-op> ::= "and" | "or"
+
+<comparator> ::= "=" | ">" | "<" | ">=" | "<=" | "!="
+
+<special-condition> ::= "confident"              # Above threshold
+                      | "uncertain"              # Below threshold  
+                      | "successful"            # Action succeeded
+                      | "failed"                # Action failed
+                      | "confidence is below threshold"
+
+(* ============================================================
+   ACTIONS
+   ============================================================ *)
+
+<action> ::= <conversation-action>
+           | <capability-action>
+           | <flow-action>
+           | <negotiation-action>
+           | <learning-action>
+
+<conversation-action> ::= "ask for clarification:" <text-value>
+                        | "respond with:" <text-value>
+                        | "offer choices:" "[" <string-list> "]"
+                        | "generate response" ["with style:" <string>]
+
+<capability-action> ::= <capability-call> ["then" <action>]
+
+<capability-call> ::= <identifier> "." <function-name> 
+                      [<capability-params>]
+
+<capability-params> ::= ["for" <string>]      (* Intent description *)
+                       ["await"]              (* Async execution *)
+                       ["timeout" <number>]   (* Timeout in seconds *)
+
+<flow-action> ::= "escalate to:" <identifier>
+                | "continue"
+                | "retry" ["with" <string>]
+                | "delegate to:" <identifier>
+                | "return"
+
+<negotiation-action> ::= "negotiate" <text-value> "until" <condition>
+                       | "clarify" <identifier> "with options:" "[" <string-list> "]"
+
+<learning-action> ::= "learn pattern"
+                    | "boost confidence"
+                    | "remember outcome"
+
+(* ============================================================
+   LEARNING SECTION
+   ============================================================ *)
+
+<learning-section> ::= "learning" "{" {<learning-element>} "}"
+
+<learning-element> ::= <simple-learning-rule>
+                     | <learning-strategy>
+
+<simple-learning-rule> ::= "remember successful patterns"
+                         | "adjust confidence from outcomes"
+                         | "add variations that worked"
+                         | "track conversation paths"
+
+<learning-strategy> ::= <strategy-name> ":" <learning-spec>
+
+<strategy-name> ::= "evolve"      (* Generate variations *)
+                  | "reinforce"   (* Strengthen successful patterns *)
+                  | "generalize"  (* Find commonalities *)
+                  | "specialize" (* Create specific cases *)
+
+<learning-spec> ::= <string>
+                  | "{" {<learning-param>} "}"
+
+<learning-param> ::= <identifier> ":" <param-value>
+
+<param-value> ::= <value>
+                | "[" <value-list> "]"
+                | "{" {<learning-param>} "}"
+
+<value-list> ::= <value> {"," <value>}
+
+(* ============================================================
+   VALUE REFERENCES AND TEMPLATES
+   ============================================================ *)
+
+<value-ref> ::= <identifier>
+              | <dotted-name>
+              | <template-variable>
+
+<dotted-name> ::= <identifier> {"." <identifier>}
+
+<template-variable> ::= "{" <dotted-name> "}"
+                      | "${" <arithmetic-expr> "}"
+
+<arithmetic-expr> ::= <dotted-name>
+                    | <dotted-name> <math-op> <number>
+                    | <number> <math-op> <dotted-name>
+
+<math-op> ::= "+" | "-" | "*" | "/"
+
+<text-value> ::= <string> 
+               | <text-block>
+               | <template-string>
+
+<template-string> ::= <string-with-variables>  (* Contains {var} placeholders *)
+
+<string-with-variables> ::= {<text-char> | <template-variable>}
+
+(* ============================================================
+   LEXICAL ELEMENTS
+   ============================================================ *)
+
+<identifier> ::= <letter> {<letter> | <digit> | "_"}
+
+<string> ::= '"' {<any-char-except-quote>} '"'
+           | "'" {<any-char-except-single-quote>} "'"
+
+<text-block> ::= '"""' <any-text> '"""'
+               | "'''" <any-text> "'''"
+
+<number> ::= ["-"] <digit>+ ["." <digit>+]
+
+<value> ::= <string> | <number> | <identifier> | "true" | "false"
+
+<string-list> ::= <string> {"," <string>}
+
+<participant> ::= <identifier> | "user" | "assistant" | "system"
+
+<comment> ::= "#" {<any-char-except-newline>} <newline>
+            | "//" {<any-char-except-newline>} <newline>
+            | "/*" <any-text> "*/"
+
+(* ============================================================
+   CHARACTER CLASSES
+   ============================================================ *)
+
+<letter> ::= "a" | "b" | ... | "z" | "A" | "B" | ... | "Z"
+<digit> ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+<any-char-except-quote> ::= <any-unicode-char> - '"'
+<any-char-except-single-quote> ::= <any-unicode-char> - "'"
+<any-char-except-newline> ::= <any-unicode-char> - <newline>
+<any-text> ::= {<any-unicode-char>}
+<text-char> ::= <any-unicode-char> - "{" - "}"
+<newline> ::= "\n" | "\r\n"
+
+(* ============================================================
+   NOTES ON EXPANSIONS
+   ============================================================ *)
+
+(* Major additions from the MVP grammar:
+   1. Comments: Three styles (#, //, /* */)
+   2. Inheritance: Games and moves can extend others
+   3. Multi-line strings: Triple quotes for text blocks
+   4. Pattern modifiers: (strict), (fuzzy), (learned), (context-sensitive)
+   5. Context guards: `requires context:` clauses
+   6. Rich conditions: Comparisons, compound conditions, pattern matching
+   7. Flexible confidence: Named levels, adaptive, weighted formulas
+   8. Capability parameters: await, timeout, intent descriptions
+   9. Negotiation actions: First-class negotiation support
+   10. Variable references: {result.value}, ${calculations}
+   11. Extended learning: Strategies beyond three fixed rules
+   12. Else/Else if: Complete conditional chains
+   13. Dynamic participants: Pattern-based action matching
+   14. Template strings: Runtime variable substitution
+   15. Special conditions: confident, uncertain as shortcuts
+*)
+
+(* Runtime semantics summary:
+   - {variable} references are resolved from context/results
+   - ${expr} allows simple arithmetic in templates
+   - Pattern matching can use embeddings for semantic similarity
+*)
+# - Confidence values affect move selection and negotiation
+# - Learning rules modify pattern database over time

@@ -1,84 +1,141 @@
-# LGDL MVP (v0.1) — Full Skeleton
+# LGDL MVP (v0.1)
 
-This repository contains a *working* MVP for LGDL:
-- Lark grammar (`lgdl/spec/grammar_v0_1.lark`)
-- Parser + Transformer → typed AST
-- IR compiler
-- Runtime with `POST /move`
-- Matcher with **OpenAI embeddings** (if `OPENAI_API_KEY` set) or offline fallback
-- CLI (`validate`, `compile`)
-- Examples + golden dialogs
-- Basic tests
+Language-Game Definition Language (LGDL) lets you describe conversational "games"—sets of moves, triggers, and actions—that can be parsed, compiled to an intermediate representation, and executed at runtime. This repository provides a complete MVP implementation:
 
-## Install
+- **Grammar & Parser** – authoritative Lark grammar (`lgdl/spec/grammar_v0_1.lark`) and transformer producing typed AST dataclasses.
+- **IR Compiler** – deterministic AST-to-IR conversion (`lgdl/parser/ir.py`) with regex-backed triggers and confidence thresholds.
+- **Runtime** – FastAPI `/move` endpoint orchestrating matching, policy checks, capability shims, and response generation.
+- **Tooling** – CLI (`lgdl`) for validation/compilation, example medical scheduling game, golden dialog tests, and pytest coverage.
 
-Create & sync the environment
-### new venv managed by uv
+>  The runtime preloads a single game manifest (`examples/medical/game.lgdl`) at startup. All `/move` requests run against that compiled game. Serving multiple games concurrently would require additional routing (e.g., a `game_id`) or separate processes.
+
+> The MVP grammar is a subset of the expanded specification in [`lgdl/spec/full_grammar_v1_0.ebnf`](lgdl/spec/full_grammar_v1_0.ebnf); the full grammar adds participants, vocabulary, context guards, learning rules, and richer templates while remaining additive over the baseline.
+---
+
+## Repository Layout
+
+```
+lgdl/
+  spec/            # Grammar definitions (.lark /.ebnf)
+  parser/          # AST nodes, parser, IR compiler
+  runtime/         # FastAPI API, matcher, policy, capability shim
+  cli/             # Click-based `lgdl` CLI
+examples/medical/  # Sample game + golden dialogs + capability contract
+scripts/           # Golden runner utilities
+tests/             # Pytest coverage for parser/runtime
+```
+
+---
+
+## Prerequisites
+
+- Python 3.10+
+- [uv](https://github.com/astral-sh/uv) (used for environment management and execution)
+- Optional: `OPENAI_API_KEY` for embedding-based matching (falls back to token overlap otherwise)
+
+---
+
+## Setup
+
+```bash
+# create project-local virtualenv
 uv venv .venv
 
-### install runtime deps only
+# install baseline runtime dependencies
 uv sync
 
-### …or include extras and dev tools:
-uv sync --extra openai --extra dev
+# optional extras
+uv sync --extra openai      # enable OpenAI HTTP client for embeddings
+uv sync --extra dev         # add pytest, requests, PyYAML, ruff, etc.
+```
 
-Run things with uv (no manual activation needed)
-### start API
-uv run uvicorn lgdl.runtime.api:app --reload
+`uv run …` automatically activates the virtualenv, so no manual `source .venv/bin/activate` is needed.
 
-### run CLI
+---
+
+## CLI Usage
+
+Validate and compile LGDL files via the packaged CLI entrypoint:
+
+```bash
 uv run lgdl validate examples/medical/game.lgdl
-uv run lgdl compile examples/medical/game.lgdl -o out.ir.json
+uv run lgdl compile  examples/medical/game.lgdl -o out.ir.json
+```
 
-### run tests
-uv run pytest
+The compiled IR contains regex triggers, confidence thresholds, and block/action metadata consumed by the runtime.
 
-Enable embeddings
+---
+
+## Running the API
+
+```bash
+# optional: expose embedding key to enable cosine similarity scoring
 export OPENAI_API_KEY=sk-...
-uv sync --extra openai
-> now the runtime will use cosine similarity over OpenAI embeddings;
-without the key (or without the extra), it falls back to token overlap.
 
-
-
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-# or
-pip install lark fastapi uvicorn pydantic jsonschema click numpy openai pytest
+# launch FastAPI runtime on http://127.0.0.1:8000
+uv run uvicorn lgdl.runtime.api:app --reload --port 8000
 ```
 
-## Run API
+Example request/response:
 
 ```bash
-export OPENAI_API_KEY=sk-...   # optional; enables embedding-based matching
-uvicorn lgdl.runtime.api:app --reload
-curl -s -X POST localhost:8000/move -H 'content-type: application/json'   -d '{"conversation_id":"c1","user_id":"u1","input":"I need to see Dr. Smith"}' | jq
+curl -s \
+  -X POST http://127.0.0.1:8000/move \
+  -H 'content-type: application/json' \
+  -d '{
+        "conversation_id": "c1",
+        "user_id": "u1",
+        "input": "I need to see Dr. Smith"
+      }'
 ```
 
-## CLI
+```json
+{
+  "move_id": "appointment_request",
+  "confidence": 0.92,
+  "response": "I can check availability for Smith. Availability for Smith: Tue 10:00, Wed 14:00",
+  "action": "check_availability",
+  "manifest_id": "...",
+  "latency_ms": 2.37,
+  "firewall_triggered": false
+}
+```
+
+---
+
+## Tests & Goldens
 
 ```bash
-python -m lgdl.cli.main validate examples/medical/game.lgdl
-python -m lgdl.cli.main compile  examples/medical/game.lgdl -o out.ir.json
+# unit tests (pytest)
+uv run pytest -q
 
-uv run python scripts/goldens.py --file examples/medical/golden_dialogs.yaml --api http://localhost:8000/move -v
+# golden dialog runner (requires API running separately)
+uv run python scripts/goldens.py --api http://127.0.0.1:8000/move -v
+uv run python scripts/goldens.py --file examples/medical/golden_dialogs.yaml -v
 
-Tests
-
-- uv run lgdl validate examples/medical/game.lgdl
-- uv run pytest -q
-- uv run bash scripts/run_goldens.sh
-
-(Use uv run uvicorn lgdl.runtime.api:app --reload --port 8000 before running uv run python scripts/goldens.py, since it assumes the API is already up.)
-
-
-
+# end-to-end convenience script: spins up API, runs goldens, shuts down
+uv run bash scripts/run_goldens.sh
 ```
 
-## Tests
+The golden dialogs in `examples/medical/golden_dialogs.yaml` assert move selection, confidence thresholds, actions, and response substrings for representative scenarios (confident match, negotiation, boundary confidence, capability denial).
 
-```bash
-pip install pytest
-pytest -q
-```
+---
+
+## Optional Embedding Support
+
+When `OPENAI_API_KEY` is provided and the `openai` extra is installed, `lgdl.runtime.matcher.TwoStageMatcher` uses cosine similarity between cached embeddings to influence scoring (`strict` triggers still short-circuit to high confidence). Without the key, the matcher falls back to deterministic token overlap.
+
+---
+
+## Contributing
+
+- Keep `lgdl/spec/grammar_v0_1.lark` as the source of truth for grammar updates and ensure `lgdl/spec/grammar_v0_1.ebnf` stays aligned.
+
+- Maintain backwards-compatible AST dataclasses where possible and extend tests/goldens when behaviour changes.
+- Use `uv sync --extra dev` + `uv run pytest -q` before opening a PR.
+
+---
+
+## License
+
+MIT © 2025 Graziano Labs Corp.

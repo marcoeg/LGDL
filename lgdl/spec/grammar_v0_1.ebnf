@@ -1,6 +1,19 @@
 (*
   LGDL v0.1 (MVP) — EBNF
-  Matches the implemented Lark grammar in lgdl/spec/grammar_v0_1.lark
+
+  Copyright (c) 2025 Graziano Labs Corp.
+ 
+  Alignment notes:
+    - This grammar is a faithful subset of `full_grammar_v1_0.ebnf`,
+      covering core program structure, capabilities, moves, triggers,
+      confidence, conditions, and action constructs.
+    - Features omitted here (participants catalog, vocabulary, context
+      guards, learning rules, arithmetic templates, etc.) are additive
+      in the full spec and can be introduced without breaking existing
+      MVP files.
+    - Capability function names in the MVP may be quoted strings in
+      addition to bare identifiers; the expanded grammar restricts them
+      to identifiers, so adjust there if quoted names are desired.
 *)
 
 (* =======================

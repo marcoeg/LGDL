@@ -15,6 +15,7 @@ import time
 import re
 from typing import Any, Dict, List
 
+import json
 import requests
 import yaml
 
@@ -46,7 +47,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def color(s: str, c: str) -> str:
-    codes = {"red": "31", "green": "32", "yellow": "33", "cyan": "36"}
+    codes = {"red": "31", "green": "32", "yellow": "33", "cyan": "36", "white": "37", "green_dim": "32;2"}
     return f"\x1b[{codes.get(c,'0')}m{s}\x1b[0m"
 
 
@@ -126,8 +127,14 @@ def run_dialogs(api: str, goldens: Dict[str, Any], verbose: bool, stop_on_fail: 
                 continue
 
             data = r.json()
+            resp_text = str(data.get("response", ""))
+
+            print(color("User:", "yellow"), color(user_input, "white"))
+            print(color("LGDL:", "cyan"), color(resp_text, "white"))
             if verbose:
-                print(color(f"[RESP] {dname}", "cyan"), data)
+                pretty = json.dumps(data, indent=2, ensure_ascii=False)
+                print(color(f"[RESP JSON] {dname}", "cyan"))
+                print(color(pretty, "green_dim"))
 
             # Assertions
             ok = True
@@ -162,7 +169,6 @@ def run_dialogs(api: str, goldens: Dict[str, Any], verbose: bool, stop_on_fail: 
 
             # response_contains
             exp_contains = expect.get("response_contains", [])
-            resp_text = str(data.get("response", ""))
             for needle in exp_contains:
                 if str(needle).lower() not in resp_text.lower():
                     ok = False
@@ -178,6 +184,7 @@ def run_dialogs(api: str, goldens: Dict[str, Any], verbose: bool, stop_on_fail: 
                 total_fail += 1
                 if stop_on_fail:
                     return total_fail
+            print()
 
     dur_ms = int((time.time() - start_time) * 1000)
     passed = total_turns - total_fail

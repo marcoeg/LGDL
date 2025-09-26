@@ -1,4 +1,8 @@
 // lgdl/spec/grammar_v0_1.lark
+//   Matches the EBNF in lgdl/spec/grammar_v0_1.ebnf
+//
+// Copyright (c) 2025 Graziano Labs Corp.
+
 
 start: program
 program: (COMMENT | game_def)*
