@@ -1,0 +1,196 @@
+(*
+  LGDL v0.1 (MVP) — EBNF
+  Matches the implemented Lark grammar in lgdl/spec/grammar_v0_1.lark
+*)
+
+(* =======================
+   1) PROGRAM STRUCTURE
+   ======================= *)
+
+program        = { comment | game_def } ;
+
+game_def       = "game", IDENT, [ "extends", IDENT ], "{", game_body, "}" ;
+
+game_body      = { description_section
+                 | capabilities_section
+                 | moves_section
+                 | comment } ;
+
+description_section
+               = "description:", text_value ;
+
+capabilities_section
+               = "capabilities", "{", { capability }, "}" ;
+
+capability     = IDENT, ":", capability_spec ;
+
+capability_spec= "[", func_list, "]"
+               | STRING ;
+
+func_list      = func_name, { ",", func_name } ;
+
+func_name      = IDENT | STRING ;
+
+moves_section  = "moves", "{", { move_def }, "}" ;
+
+move_def       = "move", IDENT, [ "extends", IDENT ], "{", { move_elem }, "}" ;
+
+move_elem      = trigger_clause
+               | confidence_clause
+               | when_block
+               | if_block
+               | comment ;
+
+
+(* =======================
+   2) TRIGGERS & PATTERNS
+   ======================= *)
+
+trigger_clause = "when", participant, "says", "something", "like:", "[",
+                 pattern_spec_list, "]" ;
+
+participant    = IDENT ;
+
+pattern_spec_list
+               = pattern_spec, { ",", pattern_spec } ;
+
+pattern_spec   = pattern, [ "(", modifier_list, ")" ] ;
+
+pattern        = STRING | TEXT_BLOCK ;
+
+modifier_list  = modifier, { ",", modifier } ;
+
+modifier       = "strict" | "fuzzy" | "context-sensitive" | "learned" ;
+
+
+(* =======================
+   3) CONFIDENCE
+   ======================= *)
+
+confidence_clause
+               = ( "confidence", "needed:" | "confidence:" ), confidence_expr ;
+
+confidence_expr= NUMBER
+               | "adaptive" | "high" | "medium" | "low" | "critical" ;
+
+
+(* =======================
+   4) CONDITIONS & BLOCKS
+   ======================= *)
+
+when_block     = "when", condition, "{", { action }, "}" ;
+
+/*
+  Note: In the MVP, an ‘if … else if … else …’ chain is compiled into a
+  single chain block (kind="if_chain") preserving source order.
+*/
+if_block       = "if", condition, "{", { action }, "}",
+                 { "else", "if", condition, "{", { action }, "}" },
+                 [ "else", "{", { action }, "}" ] ;
+
+condition      = simple_condition
+               | "(", condition, ")"
+               | condition, LOGICAL_OP, condition ;  (* left-associative *)
+
+simple_condition
+               = value_ref
+               | value_ref, COMPARATOR, value
+               | value_ref, "is", value
+               | value_ref, "matches", pattern
+               | "not", simple_condition
+               | special_condition ;
+
+special_condition
+               = "confident"
+               | "uncertain"
+               | "successful"
+               | "failed"
+               | "confidence", "is", "below", "threshold" ;
+
+LOGICAL_OP     = "and" | "or" ;
+COMPARATOR     = "=" | ">" | "<" | ">=" | "<=" | "!=" ;
+
+
+(* =======================
+   5) ACTIONS
+   ======================= *)
+
+action         = conversation_action
+               | capability_action
+               | flow_action
+               | negotiation_action
+               | comment ;
+
+conversation_action
+               = "ask", "for", "clarification:", text_value
+               | "respond", "with:", text_value
+               | "offer", "choices:", "[", string_list, "]"
+               | "generate", "response", [ "with", "style:", STRING ] ;
+
+capability_action
+               = capability_call, [ "then", action ] ;
+
+capability_call= IDENT, ".", IDENT, [ capability_params ] ;
+
+capability_params
+               = [ "for", STRING ], [ "await" ], [ "timeout", NUMBER ] ;
+
+flow_action    = "escalate", "to:", IDENT
+               | "continue"
+               | "retry", [ "with", STRING ]
+               | "delegate", "to:", IDENT
+               | "return" ;
+
+negotiation_action
+               = "negotiate", text_value, "until", condition
+               | "clarify", IDENT, "with", "options:", "[", string_list, "]" ;
+
+
+(* =======================
+   6) VALUES & TEMPLATES
+   ======================= *)
+
+value_ref      = IDENT, { ".", IDENT } ;
+
+value          = STRING | NUMBER | IDENT | "true" | "false" ;
+
+text_value     = STRING | TEXT_BLOCK | template_string ;
+
+template_string= STRING_WITH_VARS ;
+
+string_list    = STRING, { ",", STRING } ;
+
+
+(* =======================
+   7) LEXICAL ELEMENTS
+   ======================= *)
+
+(* Terminals below mirror the Lark lexer tokens used in the MVP.            *)
+(* They are given here as regex-style descriptions in comments for clarity. *)
+
+IDENT          = ?identifier ;
+NUMBER         = ?number ;
+STRING         = ?escaped_single_or_double_quoted_string ;
+TEXT_BLOCK     = ?triple_quoted_text_block ;
+STRING_WITH_VARS
+               = ?double_quoted_with_{var}_placeholders ;
+
+comment        = ?line_comment_hash
+               | ?line_comment_slashslash
+               | ?block_comment_slashstar ;
+
+(* -------- Descriptive regex-style notes for terminals --------
+   (These are comments; your lexer should implement them accordingly.)
+   ?identifier:                       /[A-Za-z_][A-Za-z0-9_]*/
+   ?number:                           /-?\d+(\.\d+)?/
+   ?escaped_single_or_double_quoted_string:
+                                       - double: /"([^"\\]|\\.)*"/
+                                       - single: /'([^'\\]|\\.)*'/
+   ?triple_quoted_text_block:          /"""(.|\n)*?"""|'''(.|\n)*?'''/
+   ?double_quoted_with_{var}_placeholders:
+                                       - like STRING but can contain
+                                         {ident ( "." ident )* } segments
+   ?line_comment_hash:                 starts with #, runs to end-of-line
+   ?line_comment_slashslash:           starts with //, runs to end-of-line
+   ?block_comment_slashstar:           /* ... */ (multi-line)
+*)

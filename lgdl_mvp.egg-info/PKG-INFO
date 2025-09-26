@@ -1,0 +1,71 @@
+Metadata-Version: 2.4
+Name: lgdl-mvp
+Version: 0.1.0
+Summary: LGDL MVP: Lark grammar + runtime with optional OpenAI embeddings
+Author: Your Team
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi<1,>=0.112
+Requires-Dist: uvicorn[standard]<1,>=0.30
+Requires-Dist: pydantic<3,>=2.7
+Requires-Dist: lark<2,>=1.1
+Requires-Dist: jsonschema<5,>=4.22
+Requires-Dist: click<9,>=8.1
+Requires-Dist: numpy<3,>=1.26
+Provides-Extra: openai
+Requires-Dist: httpx<1,>=0.27; extra == "openai"
+Provides-Extra: dev
+Requires-Dist: pytest<9,>=8; extra == "dev"
+Requires-Dist: pytest-asyncio<1,>=0.23; extra == "dev"
+Requires-Dist: requests<3,>=2.31; extra == "dev"
+Requires-Dist: PyYAML<7,>=6; extra == "dev"
+Requires-Dist: ruff<1,>=0.6; extra == "dev"
+
+# LGDL MVP (v0.1) — Full Skeleton
+
+This repository contains a *working* MVP for LGDL:
+- Lark grammar (`lgdl/spec/grammar_v0_1.lark`)
+- Parser + Transformer → typed AST
+- IR compiler
+- Runtime with `POST /move`
+- Matcher with **OpenAI embeddings** (if `OPENAI_API_KEY` set) or offline fallback
+- CLI (`validate`, `compile`)
+- Examples + golden dialogs
+- Basic tests
+
+## Install
+
+Prefer using [`uv`](https://github.com/astral-sh/uv) for environment management:
+
+```bash
+uv venv .venv
+uv sync                 # core runtime deps
+# optionally pull extras:
+uv sync --extra openai  # enable embedding matcher HTTP client
+uv sync --extra dev     # add pytest, requests, ruff, etc.
+```
+
+> Tip: `uv` auto-activates the virtualenv when you run `uv run …`, so you don’t need to source `.venv/bin/activate` manually. If you prefer pip, the legacy `requirements.txt` remains available.
+
+## Run API
+
+```bash
+export OPENAI_API_KEY=sk-...   # optional; enables embedding-based matching
+uv run uvicorn lgdl.runtime.api:app --reload --port 8000
+curl -s -X POST localhost:8000/move -H 'content-type: application/json' \
+  -d '{"conversation_id":"c1","user_id":"u1","input":"I need to see Dr. Smith"}' | jq
+```
+
+## CLI
+
+```bash
+uv run lgdl validate examples/medical/game.lgdl
+uv run lgdl compile  examples/medical/game.lgdl -o out.ir.json
+```
+
+## Tests
+
+```bash
+uv run pytest -q
+```

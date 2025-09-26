@@ -1,0 +1,35 @@
+game: medical_scheduling
+version: 0.1
+dialogs:
+  - name: doctor_name_present
+    turns:
+      - input: "I need to see Dr. Smith"
+        expect:
+          move: appointment_request
+          confidence: ">=0.80"
+          response_contains: ["availability", "Smith"]
+
+  - name: ambiguous_triggers_negotiation
+    turns:
+      - input: "I need help"
+        expect:
+          move: general_inquiry
+          confidence: ">=0.30"
+          response_contains: ["appointments", "general info"]
+
+  - name: needs_name_negotiation
+    turns:
+      - input: "I need to see a doctor"
+        expect:
+          move: appointment_request
+          confidence: "<=0.70"
+          response_contains: ["specific doctor", "provider"]
+
+  - name: capability_enforced
+    turns:
+      - input: "Book appointment with Dr. Lee"
+        expect:
+          move: book_intent
+          confidence: ">=0.50"
+          response_contains: ["Attempting to book", "Not allowed"]
+          action: null

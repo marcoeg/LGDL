@@ -1,0 +1,118 @@
+// lgdl/spec/grammar_v0_1.lark
+
+start: program
+program: (COMMENT | game_def)*
+
+game_def: "game" IDENT ("extends" IDENT)? "{" game_body "}"
+game_body: (description_section
+          | capabilities_section
+          | moves_section
+          | COMMENT)*
+
+description_section: "description:" text_value
+
+capabilities_section: "capabilities" "{" capability* "}"
+capability: IDENT ":" capability_spec
+capability_spec: "[" func_list "]" | STRING
+func_list: func_name ("," func_name)*
+func_name: IDENT | STRING
+
+moves_section: "moves" "{" move_def* "}"
+move_def: "move" IDENT ("extends" IDENT)? "{" move_elem* "}"
+
+move_elem: trigger_clause
+         | confidence_clause
+         | when_block
+         | if_block
+         | COMMENT
+
+trigger_clause: "when" participant "says" "something" "like:" "[" pattern_spec_list "]"
+participant: IDENT
+
+pattern_spec_list: pattern_spec ("," pattern_spec)*
+pattern_spec: pattern ( "(" modifier_list ")" )?
+pattern: STRING | TEXT_BLOCK
+modifier_list: MODIFIER ("," MODIFIER)*
+
+confidence_clause: ("confidence" "needed:" | "confidence:") confidence_expr
+confidence_expr: NUMBER | CONF_LEVEL
+
+when_block: "when" condition "{" action* "}"
+if_block: "if" condition "{" action* "}" ("else" "if" condition "{" action* "}")* ("else" "{" action* "}")?
+
+// Conditions (subset)
+condition: simple_condition
+         | condition LOGICAL_OP condition    -> compound_condition
+         | "(" condition ")"
+
+simple_condition: value_ref
+                | value_ref COMPARATOR value
+                | value_ref "is" value
+                | value_ref "matches" pattern
+                | "not" simple_condition
+                | special_condition
+
+special_condition: CONFIDENT | UNCERTAIN | SUCCESSFUL | FAILED | CONFIDENCE_BELOW_THRESHOLD
+
+LOGICAL_OP: "and" | "or"
+COMPARATOR: "=" | ">" | "<" | ">=" | "<=" | "!="
+
+// Actions (subset)
+action: conversation_action
+      | capability_action
+      | flow_action
+      | negotiation_action
+      | COMMENT
+
+conversation_action: "ask" "for" "clarification:" text_value            -> ask_clarification
+                   | "respond" "with:" text_value                       -> respond_with
+                   | "offer" "choices:" "[" string_list "]"           -> offer_choices
+                   | "generate" "response" ("with" "style:" STRING)? -> generate_response
+
+capability_action: capability_call ("then" action)?
+capability_call: IDENT "." IDENT capability_params
+capability_params: ("for" STRING)? ("await")? ("timeout" NUMBER)?
+
+flow_action: "escalate" "to:" IDENT
+           | "continue"
+           | "retry" ("with" STRING)?
+           | "delegate" "to:" IDENT
+           | "return"
+
+negotiation_action: "negotiate" text_value "until" condition
+                  | "clarify" IDENT "with" "options:" "[" string_list "]"
+
+// Values & templates (subset)
+value_ref: IDENT ( "." IDENT )*
+value: STRING | NUMBER | IDENT | "true" | "false"
+
+text_value: STRING | TEXT_BLOCK | template_string
+template_string: STRING_WITH_VARS
+
+string_list: STRING ("," STRING)*
+
+// Lexical
+IDENT: /[A-Za-z_][A-Za-z0-9_]*/
+NUMBER: /-?\d+(\.\d+)?/
+
+MODIFIER: "strict" | "fuzzy" | "context-sensitive" | "learned"
+CONF_LEVEL: "adaptive" | "high" | "medium" | "low" | "critical"
+CONFIDENT: "confident"
+UNCERTAIN: "uncertain"
+SUCCESSFUL: "successful"
+FAILED: "failed"
+CONFIDENCE_BELOW_THRESHOLD: "confidence is below threshold"
+
+TEXT_BLOCK: /"""(.|\n)*?"""/ | /'''(.|\n)*?'''/
+
+STRING: ESCAPED_DQ | ESCAPED_SQ
+ESCAPED_DQ: /"([^"\\]|\\.)*"/
+ESCAPED_SQ: /'([^'\\]|\\.)*'/
+
+// Template strings allow {var} placeholders inside double quotes
+STRING_WITH_VARS: /"([^"\\]|\\.|{[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*})*"/
+
+COMMENT: /#.*\n/ | /\/\/.*\n/ | /\/\*([\s\S]*?)\*\//
+
+%import common.WS
+%ignore WS

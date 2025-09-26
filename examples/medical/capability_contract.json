@@ -1,0 +1,26 @@
+{
+  "name": "check_availability",
+  "timeout_ms": 3000,
+  "max_retries": 2,
+  "request_schema": {
+    "type": "object",
+    "properties": {
+      "doctor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "date": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "additionalProperties": false
+  },
+  "pii_fields": [
+    "doctor"
+  ]
+}

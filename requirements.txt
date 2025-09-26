@@ -1,0 +1,9 @@
+lark
+fastapi
+uvicorn
+pydantic
+jsonschema
+click
+numpy
+openai
+pytest

@@ -1,0 +1,141 @@
+{
+  "name": "medical_scheduling",
+  "moves": [
+    {
+      "id": "appointment_request",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "I need to see Dr. {doctor}",
+              "mods": [
+                "strict"
+              ],
+              "regex": "I need to see Dr. (?P<doctor>.+?)"
+            },
+            {
+              "text": "appointment with {doctor}",
+              "mods": [],
+              "regex": "appointment with (?P<doctor>.+?)"
+            },
+            {
+              "text": "book* appointment",
+              "mods": [
+                "fuzzy"
+              ],
+              "regex": "book.* appointment"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "Is this for a specific doctor or any provider?",
+                    "kind": "clarify"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "I can check availability for {doctor?any provider}."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "appointment_system",
+                  "function": "check_availability",
+                  "intent": "doctor availability",
+                  "await": false,
+                  "timeout": 3.0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "general_inquiry",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "I need help",
+              "mods": [],
+              "regex": "I need help"
+            },
+            {
+              "text": "not feeling well",
+              "mods": [],
+              "regex": "not feeling well"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "offer_choices",
+                  "data": {
+                    "choices": [
+                      "Book appointment",
+                      "General info"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "I can help with appointments or basic info."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "capabilities": []
+}

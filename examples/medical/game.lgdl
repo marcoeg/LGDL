@@ -1,0 +1,60 @@
+game medical_scheduling {
+  description: "Schedule appointments with doctors and negotiate when uncertain."
+
+  capabilities {
+    appointment_system: ["check_availability", "book"]
+  }
+
+  moves {
+    move appointment_request {
+      when user says something like: [
+        "I need to see Dr. {doctor}" (strict),
+        "appointment with {doctor}",
+        "appointment with Dr. {doctor}",
+        "see {doctor}" (fuzzy),
+        "book with {doctor}" (fuzzy),
+        "see {doctor} at {date}" (fuzzy)
+      ]
+      confidence: high
+
+      if uncertain {
+        ask for clarification: "Is this for a specific doctor or any provider?"
+      }
+
+      when confident {
+        respond with: "I can check availability for {doctor?any provider}."
+        appointment_system.check_availability for "doctor availability" timeout 3
+      }
+    }
+
+    move general_inquiry {
+      when user says something like: [
+        "I need help",
+        "not feeling well"
+      ]
+      confidence: medium
+
+      if uncertain {
+        offer choices: ["Book appointment", "General info"]
+      }
+
+      when confident {
+        respond with: "I can help with appointments or general info."
+      }
+    }
+
+    move book_intent {
+      when user says something like: [
+        "book appointment with {doctor}" (strict),
+        "book with Dr. {doctor}" (strict),
+        "schedule me with {doctor}" (fuzzy)
+      ]
+      confidence: medium
+
+      when confident {
+        respond with: "Attempting to book {doctor}."
+        appointment_system.book for "booking" timeout 5
+      }
+    }
+  }
+}

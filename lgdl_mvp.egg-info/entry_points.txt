@@ -1,0 +1,2 @@
+[console_scripts]
+lgdl = lgdl.cli.main:cli
