@@ -1,0 +1,617 @@
+# Comprehensive Emergency Room Triage System
+# Demonstrates all LGDL expanded grammar features
+
+# Base game for general medical interactions
+game medical_base {
+    description: """
+    Foundation game for medical conversations providing
+    common vocabulary, safety protocols, and HIPAA compliance.
+    All medical games should extend this base.
+    """
+    
+    participants {
+        patient can do: anything
+        medical_staff can do: actions matching "assess.*|treat.*|prescribe.*"
+        system can do: ["verify insurance", "access records", "log interactions"]
+    }
+    
+    vocabulary {
+        "hurts" also means: ["painful", "sore", "aching", "tender", "throbbing"]
+        "really bad" also means: ["severe", "intense", "unbearable", "extreme"]
+    }
+    
+    moves {
+        move emergency_escalation {
+            when patient says something like: [
+                "can't breathe" (strict),
+                "chest feels crushed" (strict),
+                "losing consciousness" (strict)
+            ]
+            
+            confidence: critical  # 0.95+ required
+            
+            when confident {
+                escalate to: code_blue_protocol
+            }
+        }
+    }
+}
+
+# Main emergency room triage game
+game emergency_triage extends medical_base {
+    description: """
+    Emergency room triage system following ESI (Emergency Severity Index) protocols.
+    Handles patient intake, severity assessment, vital signs collection, and
+    prioritization for treatment. Integrates with hospital systems for real-time
+    bed management and staff allocation.
+    
+    Critical safety features:
+    - Immediate escalation for life-threatening conditions
+    - Confidence-based negotiation for ambiguous symptoms  
+    - Continuous learning from triage nurse validations
+    """
+    
+    participants {
+        patient can do: ["describe symptoms", "answer questions", "provide history"]
+        triage_nurse can do: actions matching "triage.*|assess.*|prioritize.*"
+        emergency_physician can do: anything
+        system can do: ["check wait times", "assign ESI level", "alert staff", "track vitals"]
+        paramedic can do: ["report vitals", "describe field treatment", "transfer care"]
+    }
+    
+    vocabulary {
+        # Pain descriptors
+        "stabbing pain" also means: ["sharp pain", "knife-like", "piercing"]
+        "dull ache" also means: ["constant pain", "soreness", "steady hurt"]
+        "10 out of 10" also means: ["worst pain ever", "unbearable", "excruciating"]
+        
+        # Breathing issues
+        "short of breath" also means: ["can't breathe", "winded", "gasping", "breathless"]
+        "breathing funny" (fuzzy) also means: ["wheezing", "labored breathing", "respiratory distress"]
+        
+        # Cardiac symptoms  
+        "heart racing" also means: ["palpitations", "rapid heartbeat", "tachycardia"]
+        "chest pain" (context-sensitive) also means: ["chest pressure", "chest tightness", "angina"]
+        
+        # Neurological
+        "dizzy" also means: ["lightheaded", "room spinning", "vertigo", "faint"]
+        "worst headache" (strict) also means: ["thunderclap headache", "sudden severe headache"]
+        
+        # Time expressions
+        "just started" also means: ["just now", "minutes ago", "suddenly"]
+        "been going on" also means: ["persistent", "chronic", "ongoing"]
+    }
+    
+    capabilities {
+        ehr_system: ["lookup_patient", "get_medical_history", "check_allergies", "view_medications"]
+        vital_monitor: ["measure_bp", "measure_pulse", "measure_temp", "measure_o2", "measure_glucose"]
+        lab_system: ["order_stat_labs", "check_results", "flag_critical_values"]
+        bed_management: ["check_availability", "reserve_bed", "get_wait_times"]
+        radiology: ["order_xray", "order_ct", "order_mri", "check_availability"]
+        pharmacy: ["check_interactions", "verify_dosage", "dispense_medication"]
+        notification: ["alert_physician", "call_code", "notify_specialist", "update_family"]
+    }
+    
+    moves {
+        # Initial patient arrival
+        move patient_arrival {
+            requires context: not triaged
+            
+            when patient says something like: [
+                "I need help" (fuzzy),
+                "emergency" (strict),
+                "I'm hurt",
+                """
+                I've been having this problem and my doctor
+                said to come to the ER if it got worse
+                """ (context-sensitive)
+            ]
+            
+            confidence: medium  # 0.5 - broad trigger
+            
+            when confident {
+                ehr_system.lookup_patient for "initial patient identification" await timeout 2.0
+                
+                if result.found {
+                    respond with: """
+                    Welcome back {result.patient_name}. I see you're here for emergency care.
+                    I'm going to ask you some quick questions to determine how urgently 
+                    you need to be seen. This will just take a moment.
+                    
+                    What brought you to the emergency room today?
+                    """
+                } else {
+                    respond with: """
+                    I'm here to help with your emergency triage. I'll ask you a few quick
+                    questions to determine how urgently you need to be seen.
+                    
+                    First, what's your name and date of birth?
+                    """
+                    delegate to: patient_registration
+                }
+            }
+            
+            when uncertain {
+                negotiate "Are you here for emergency medical care?" until confident
+            }
+        }
+        
+        # Pain assessment with sophisticated pattern matching
+        move pain_assessment extends patient_arrival {
+            requires context: authenticated, not critical_vitals
+            
+            when patient says something like: [
+                "pain in my {body_part}" (learned),
+                "my {body_part} hurts" (fuzzy),
+                "{body_part} is killing me",
+                "I have {intensity} pain in {location}" (strict)
+            ]
+            
+            confidence: adaptive weighted by historical_accuracy
+            
+            if not extracted.pain_scale {
+                ask for clarification: """
+                I need to assess your pain level. On a scale of 1 to 10,
+                where 1 is mild discomfort and 10 is the worst pain imaginable,
+                how would you rate your pain right now?
+                """
+            }
+            
+            # Check for red flags with complex conditions
+            if extracted.location matches "chest|head|abdomen" and extracted.pain_scale >= 8 {
+                confidence: high
+                
+                when confident {
+                    vital_monitor.measure_bp await
+                    vital_monitor.measure_pulse await
+                    
+                    if (result.bp_systolic > 180 or result.bp_systolic < 90) {
+                        escalate to: immediate_physician_eval
+                    }
+                }
+            }
+            
+            # Detailed pain characterization
+            when successful {
+                clarify pain_quality with options: [
+                    "Sharp/Stabbing",
+                    "Dull/Aching", 
+                    "Burning",
+                    "Crushing/Pressure",
+                    "Throbbing",
+                    "Cramping"
+                ]
+                
+                negotiate """
+                Has this pain:
+                - Started suddenly or gradually?
+                - Been constant or does it come and go?
+                - Gotten worse, better, or stayed the same?
+                """ until extracted.pain_pattern
+                
+                delegate to: pain_intervention_protocol
+            }
+        }
+        
+        # Chest pain - highest priority with complex logic
+        move cardiac_assessment {
+            requires context: not pediatric  # age >= 18
+            
+            when patient says something like: [
+                "chest pain" (strict),
+                "pressure in chest" (strict),
+                "elephant on chest" (learned),
+                "jaw pain" (context-sensitive),  // With other cardiac symptoms
+                """
+                My chest feels tight and the pain
+                goes down my left arm
+                """ (strict)
+            ]
+            
+            confidence: 0.95  # Very high for cardiac
+            
+            when confident {
+                # Immediate actions for potential MI
+                notification.alert_physician for "possible STEMI" await
+                vital_monitor.measure_bp await
+                vital_monitor.measure_pulse await
+                vital_monitor.measure_o2 await
+                
+                respond with: """
+                I'm getting help immediately. A physician is on the way.
+                
+                Quick questions while we wait:
+                - When did this chest pain start?
+                - Have you taken any aspirin today?
+                - Do you have a history of heart problems?
+                """
+                
+                # Parallel processing
+                lab_system.order_stat_labs for "cardiac panel troponin EKG" await
+                radiology.order_xray for "portable chest" await
+                pharmacy.verify_dosage for "aspirin 325mg" await
+                
+                if result.troponin > 0.4 {
+                    escalate to: activate_cath_lab
+                }
+                
+                learn pattern  // Critical patterns always learned
+                boost confidence
+            }
+            
+            when uncertain {
+                # Never guess with cardiac symptoms
+                escalate to: immediate_nurse_evaluation
+            }
+        }
+        
+        # Respiratory distress with multi-level conditions
+        move respiratory_assessment {
+            requires context: not intubated
+            
+            when patient says something like: [
+                "can't breathe" (strict),
+                "short of breath" (fuzzy),
+                "breathing is hard" (context-sensitive),
+                "asthma attack" (learned)
+            ]
+            
+            confidence: oxygen_saturation weighted by symptom_severity
+            
+            when confident {
+                vital_monitor.measure_o2 for "oxygen saturation check" await timeout 1.0
+                
+                if result.o2_sat < 88 {
+                    notification.call_code for "respiratory distress - Room {context.room}" await
+                    respond with: "Getting oxygen and help right now. Try to stay calm."
+                    escalate to: respiratory_code_team
+                } else if result.o2_sat < 92 {
+                    ask for clarification: """
+                    Your oxygen is a bit low. Let me ask a few quick questions:
+                    - Do you have asthma, COPD, or other lung conditions?
+                    - Have you been sick recently?
+                    - Any chest pain with the breathing trouble?
+                    """
+                    delegate to: respiratory_intervention
+                } else {
+                    negotiate "Tell me more about your breathing difficulty" until extracted.respiratory_triggers
+                    continue
+                }
+            }
+        }
+        
+        # Trauma assessment with paramedic handoff
+        move trauma_intake {
+            requires context: ems_channel  // Different communication channel
+            
+            when paramedic says something like: [
+                "incoming trauma" (strict),
+                "MVA patient" (strict),  // Motor vehicle accident
+                "fall from {height}" (strict),
+                "GSW" (strict)  // Gunshot wound
+            ]
+            
+            confidence: critical  // 0.99 - Paramedic reports are reliable
+            
+            when confident {
+                bed_management.reserve_bed for "trauma bay" await
+                notification.alert_physician for "trauma team activation" await
+                notification.notify_specialist for "surgery on standby" await
+                
+                respond with: """
+                Trauma team activated. Bay 3 is ready.
+                What are the vitals and mechanism of injury?
+                """
+                
+                # Prepare resources based on injury
+                if extracted.mechanism matches "GSW|stabbing" {
+                    lab_system.order_stat_labs for "type and cross 4 units" await
+                    radiology.check_availability for "OR suite" await
+                }
+                
+                remember outcome
+            }
+        }
+        
+        # Pediatric special handling with age-based logic
+        move pediatric_assessment extends patient_arrival {
+            requires context: age < 18
+            
+            when patient says something like: [
+                "my child" (strict),
+                "my baby" (strict),
+                "won't stop crying" (fuzzy),
+                "fever and rash" (learned)
+            ]
+            
+            confidence: adaptive
+            
+            when confident {
+                # Pediatric vital signs have different normal ranges
+                vital_monitor.measure_temp for "pediatric fever check" await
+                
+                if result.temp > 104 and context.age < 3 {
+                    escalate to: pediatric_emergency
+                }
+                
+                # Weight-based medication calculations
+                if not context.weight {
+                    ask for clarification: "What is the child's weight in kilograms?"
+                }
+                
+                pharmacy.verify_dosage for "pediatric weight-based dosing" await
+                
+                # Parent/guardian involvement
+                negotiate """
+                I have some questions about your child's symptoms:
+                - When did the symptoms start?
+                - Any recent medications given?
+                - Is the child eating and drinking normally?
+                - Any known allergies?
+                """ until extracted.pediatric_history
+            }
+            
+            when uncertain {
+                # Always err on side of caution with children
+                escalate to: pediatric_nurse_triage
+            }
+        }
+        
+        # Psychiatric emergency with safety checks
+        move psychiatric_crisis {
+            requires context: not restrained, not violent
+            
+            when patient says something like: [
+                "want to hurt myself" (strict),
+                "suicidal" (strict),
+                "hearing voices" (fuzzy),
+                "can't take it anymore" (context-sensitive)
+            ]
+            
+            confidence: high
+            
+            when confident {
+                notification.notify_specialist for "psychiatric emergency" await
+                bed_management.check_availability for "quiet room" await
+                
+                respond with: """
+                I hear that you're going through a really difficult time.
+                We're going to get you help right away. A mental health 
+                specialist is coming to talk with you.
+                
+                For your safety, I need to ask: Do you have any specific 
+                plans to hurt yourself or others?
+                """
+                
+                # Safety protocol
+                if extracted.specific_plan is "true" {
+                    escalate to: psychiatric_hold_protocol
+                } else {
+                    delegate to: crisis_intervention
+                }
+                
+                learn pattern  // Important for detecting crisis language
+            }
+        }
+        
+        # Multi-symptom complexity with iterative assessment
+        move complex_presentation {
+            when patient says something like: [
+                """
+                I have multiple problems including {symptom1},
+                {symptom2}, and {symptom3}
+                """ (learned),
+                "several things wrong" (fuzzy),
+                "everything hurts" (context-sensitive)
+            ]
+            
+            confidence: low  // Complex cases need careful assessment
+            
+            when uncertain {
+                # Break down complex presentations
+                offer choices: [
+                    "Which symptom is bothering you the most?",
+                    "Which symptom started first?",
+                    "Which symptom are you most worried about?"
+                ]
+                
+                # Systematic review
+                negotiate """
+                Let me go through each concern:
+                1. Tell me more about {extracted.symptom1}
+                2. How long has {extracted.symptom2} been happening?
+                3. Is {extracted.symptom3} getting worse?
+                """ until confident
+            }
+            
+            when confident {
+                delegate to: systematic_review
+            }
+        }
+        
+        # ESI level assignment with complex decision tree
+        move assign_esi_level {
+            requires context: initial_assessment_complete
+            
+            confidence: 0.85  // High confidence needed for triage decisions
+            
+            when successful {
+                # ESI Level 1 - Immediate life threat
+                if context.requires_immediate_intervention is "true" {
+                    system.assign_esi_level for "Level 1 - Resuscitation" await
+                    notification.call_code for "Level 1 patient to trauma bay" await
+                    retry with "higher confidence"  // Double-check critical decisions
+                }
+                
+                # ESI Level 2 - High risk or severe symptoms
+                else if context.high_risk is "true" or extracted.pain_scale >= 8 {
+                    system.assign_esi_level for "Level 2 - Emergent" await
+                    bed_management.reserve_bed for "acute care" await timeout 5.0
+                    
+                    respond with: """
+                    You're being prioritized as emergent care.
+                    Expected wait time: {result.wait_time} minutes.
+                    A nurse will take you back shortly.
+                    """
+                }
+                
+                # ESI Level 3 - Urgent, multiple resources needed
+                else if context.stable_vitals is "true" and context.resources_needed >= 2 {
+                    system.assign_esi_level for "Level 3 - Urgent" await
+                    
+                    lab_system.order_stat_labs for "standard panel" await
+                    radiology.check_availability await
+                    
+                    respond with: """
+                    You'll need some tests and treatment. 
+                    Current wait time: {result.wait_time} minutes.
+                    We'll call you back as soon as a bed is available.
+                    """
+                }
+                
+                # ESI Level 4 - Less urgent
+                else if context.single_resource is "true" {
+                    system.assign_esi_level for "Level 4 - Less Urgent" await
+                    delegate to: fast_track_protocol
+                }
+                
+                # ESI Level 5 - Non-urgent
+                else {
+                    system.assign_esi_level for "Level 5 - Non-urgent" await
+                    offer choices: [
+                        "Wait for treatment (current wait: {result.wait_time} hours)",
+                        "Schedule urgent care appointment",
+                        "Receive discharge instructions for home care"
+                    ]
+                }
+                
+                remember outcome
+                boost confidence
+            }
+        }
+        
+        // Continuous monitoring while waiting
+        move waiting_room_monitor {
+            requires context: triaged = "true", not admitted
+            
+            when patient says something like: [
+                "getting worse" (fuzzy),
+                "can't wait anymore" (context-sensitive),
+                "something's changed" (learned)
+            ]
+            
+            confidence: adaptive
+            
+            when confident {
+                negotiate "What has changed since your initial assessment?" until extracted.status_change
+                
+                if extracted.status_change matches "worse|deteriorating|severe" {
+                    vital_monitor.measure_bp await
+                    vital_monitor.measure_pulse await
+                    
+                    if result.significant_change is "true" {
+                        escalate to: re_triage_urgent
+                    } else {
+                        respond with: """
+                        I've noted the change. Your vitals are still stable.
+                        Current wait time: {context.updated_wait_time}.
+                        I'll notify the nurse about your concerns.
+                        """
+                        notification.alert_physician for "patient status change" await
+                    }
+                }
+                
+                continue
+            }
+        }
+        
+        /* Special handling for elderly patients
+           Different vital sign thresholds and medication sensitivities */
+        move geriatric_assessment extends patient_arrival {
+            requires context: age >= 65
+            
+            when patient says something like: [
+                "fell down" (strict),
+                "confused lately" (fuzzy),
+                "not myself" (context-sensitive)
+            ]
+            
+            confidence: medium
+            
+            when confident {
+                # Adjusted vital thresholds for elderly
+                vital_monitor.measure_bp for "geriatric baseline" await
+                
+                // Check for polypharmacy issues
+                ehr_system.view_medications await
+                if result.medication_count > 5 {
+                    pharmacy.check_interactions for "polypharmacy review" await
+                }
+                
+                negotiate """
+                I need to understand your baseline:
+                - Do you normally use a walker or cane?
+                - Do you live alone or with assistance?
+                - Have you had any recent medication changes?
+                """ until extracted.baseline_function
+                
+                if extracted.confusion is "true" and not context.baseline_confused {
+                    escalate to: delirium_protocol
+                }
+            }
+        }
+    }
+    
+    learning {
+        # Different learning strategies for different aspects
+        evolve: {
+            mutation_rate: 0.05,  // Low - medical accuracy critical
+            selection: "outcome-based",
+            validation: "physician-confirmed"
+        }
+        
+        reinforce: "triage_nurse_agreement > 0.9"
+        
+        generalize: "symptom cluster patterns"
+        
+        specialize: {
+            by_demographic: true,
+            by_time_of_day: true,  // Different patterns nights/weekends
+            by_season: true  // Flu season, trauma season, etc.
+        }
+        
+        # Simple learning rules
+        remember successful patterns
+        adjust confidence from outcomes
+        add variations that worked
+        track conversation paths
+    }
+}
+
+# Specialized protocol referenced by main game
+game activate_cath_lab extends emergency_triage {
+    description: "STEMI activation protocol for cardiac catheterization lab"
+    
+    moves {
+        move stemi_activation {
+            requires context: confirmed_stemi = "true"
+            
+            confidence: critical  // 0.99 required
+            
+            when confident {
+                notification.call_code for "STEMI ALERT - Cath lab activation" await
+                pharmacy.verify_dosage for "heparin bolus" await
+                pharmacy.verify_dosage for "P2Y12 inhibitor load" await
+                bed_management.reserve_bed for "cath lab 1" await
+                
+                generate response with style: "urgent medical communication"
+                
+                # Calculate door-to-balloon time
+                respond with: "Cath lab activated. Target door-to-balloon: ${context.arrival_time + 90} minutes"
+                
+                learn pattern
+                remember outcome
+            }
+        }
+    }
+}
