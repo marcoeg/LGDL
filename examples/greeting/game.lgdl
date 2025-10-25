@@ -1,0 +1,53 @@
+game greeting {
+  description: "Simple greeting and farewell interactions."
+
+  moves {
+    move greeting {
+      when user says something like: [
+        "hello" (strict),
+        "hi there",
+        "hey {name?}",
+        "good morning",
+        "good afternoon"
+      ]
+      confidence: medium
+
+      when confident {
+        respond with: "Hello! How can I help you today?"
+      }
+    }
+
+    move farewell {
+      when user says something like: [
+        "goodbye" (strict),
+        "bye",
+        "see you later",
+        "have a good day",
+        "see you"
+      ]
+      confidence: medium
+
+      when confident {
+        respond with: "Goodbye! Have a great day!"
+      }
+    }
+
+    move small_talk {
+      when user says something like: [
+        "how are you",
+        "what's up",
+        "how's it going",
+        "how do you do"
+      ]
+      confidence: medium
+
+      if uncertain {
+        offer choices: ["General greeting", "Help with something"]
+      }
+
+      when confident {
+        respond with: "I'm doing well, thank you for asking!"
+      }
+    }
+  }
+}

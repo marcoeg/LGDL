@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Greeting example game with 3 moves (greeting, farewell, small_talk)
+- Golden dialog tests for greeting game (5 scenarios)
+- Multi-game validation with concurrent medical + greeting games
+
+### Changed
+- Updated README and CLI examples to use greeting game instead of non-existent er_triage
+- Fixed game.lgdl confidence thresholds for casual greetings (medium instead of high)
+
 ### Planned
 - P1-1: Negotiation state management with clarification loops
 - v1.0 Grammar: Capability await/timeout, context guards, learning hooks

@@ -1,0 +1,42 @@
+game: greeting
+version: 0.1
+dialogs:
+  - name: simple_greeting
+    turns:
+      - input: "hello"
+        expect:
+          move: greeting
+          confidence: ">=0.85"
+          response_contains: ["Hello", "help"]
+
+  - name: greeting_with_name
+    turns:
+      - input: "hey Alice"
+        expect:
+          move: greeting
+          confidence: ">=0.70"
+          response_contains: ["Hello", "help"]
+
+  - name: farewell_simple
+    turns:
+      - input: "goodbye"
+        expect:
+          move: farewell
+          confidence: ">=0.85"
+          response_contains: ["Goodbye", "great day"]
+
+  - name: farewell_casual
+    turns:
+      - input: "see you later"
+        expect:
+          move: farewell
+          confidence: ">=0.75"
+          response_contains: ["Goodbye", "great"]
+
+  - name: small_talk_confident
+    turns:
+      - input: "how are you"
+        expect:
+          move: small_talk
+          confidence: ">=0.60"
+          response_contains: ["doing well", "thank"]

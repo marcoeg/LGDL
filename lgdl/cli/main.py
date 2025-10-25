@@ -46,7 +46,7 @@ def serve(games: str, port: int, dev: bool):
       lgdl serve --games medical:examples/medical/game.lgdl
 
       # Multiple games
-      lgdl serve --games medical:examples/medical/game.lgdl,er:examples/er.lgdl
+      lgdl serve --games medical:examples/medical/game.lgdl,greeting:examples/greeting/game.lgdl
 
       # Custom port
       lgdl serve --games medical:examples/medical/game.lgdl --port 8080

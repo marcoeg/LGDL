@@ -1,0 +1,182 @@
+{
+  "name": "greeting",
+  "moves": [
+    {
+      "id": "greeting",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "hello",
+              "mods": [
+                "strict"
+              ],
+              "regex": "hello"
+            },
+            {
+              "text": "hi there",
+              "mods": [],
+              "regex": "hi there"
+            },
+            {
+              "text": "hey {name?}",
+              "mods": [],
+              "regex": "hey (?P<name>.+)"
+            },
+            {
+              "text": "good morning",
+              "mods": [],
+              "regex": "good morning"
+            },
+            {
+              "text": "good afternoon",
+              "mods": [],
+              "regex": "good afternoon"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Hello! How can I help you today?"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "farewell",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "goodbye",
+              "mods": [
+                "strict"
+              ],
+              "regex": "goodbye"
+            },
+            {
+              "text": "bye",
+              "mods": [],
+              "regex": "bye"
+            },
+            {
+              "text": "see you later",
+              "mods": [],
+              "regex": "see you later"
+            },
+            {
+              "text": "have a good day",
+              "mods": [],
+              "regex": "have a good day"
+            },
+            {
+              "text": "see you",
+              "mods": [],
+              "regex": "see you"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Goodbye! Have a great day!"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "small_talk",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "how are you",
+              "mods": [],
+              "regex": "how are you"
+            },
+            {
+              "text": "what's up",
+              "mods": [],
+              "regex": "what's up"
+            },
+            {
+              "text": "how's it going",
+              "mods": [],
+              "regex": "how's it going"
+            },
+            {
+              "text": "how do you do",
+              "mods": [],
+              "regex": "how do you do"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "offer_choices",
+                  "data": {
+                    "choices": [
+                      "General greeting",
+                      "Help with something"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "I'm doing well, thank you for asking!"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "capabilities": []
+}

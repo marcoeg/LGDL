@@ -39,7 +39,7 @@ Deterministic AST-to-IR conversion (`lgdl/parser/ir.py`) with regex-backed trigg
 
 ### Tooling
 - CLI (`lgdl`) for validation, compilation, and serving
-- Example medical scheduling game
+- Example games: medical scheduling, simple greeting
 - Golden dialog testing framework
 - Comprehensive pytest coverage
 
@@ -97,7 +97,7 @@ export OPENAI_API_KEY=sk-...
 uv run lgdl serve --games medical:examples/medical/game.lgdl
 
 # Or with multiple games
-uv run lgdl serve --games medical:examples/medical/game.lgdl,er:examples/er_triage.lgdl
+uv run lgdl serve --games medical:examples/medical/game.lgdl,greeting:examples/greeting/game.lgdl
 
 # Dev mode with hot reload
 uv run lgdl serve --games medical:examples/medical/game.lgdl --dev
@@ -191,7 +191,7 @@ uv run lgdl serve --games medical:examples/medical/game.lgdl
 # Multiple games
 uv run lgdl serve --games \
   medical:examples/medical/game.lgdl,\
-  er:examples/er_triage.lgdl
+  greeting:examples/greeting/game.lgdl
 
 # Custom port
 uv run lgdl serve --games medical:examples/medical/game.lgdl --port 8080
@@ -260,7 +260,7 @@ export OPENAI_API_KEY=sk-...
 #### Server Configuration
 ```bash
 # Multiple games (comma-separated game_id:path pairs)
-export LGDL_GAMES=medical:examples/medical/game.lgdl,er:examples/er.lgdl
+export LGDL_GAMES=medical:examples/medical/game.lgdl,greeting:examples/greeting/game.lgdl
 
 # Dev mode (enables hot reload endpoint)
 export LGDL_DEV_MODE=1
