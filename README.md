@@ -161,6 +161,8 @@ curl -X POST http://127.0.0.1:8000/games/medical/move \
 }
 ```
 
+**Note**: The `negotiation` field appears only when the negotiation loop runs (success or failure). If negotiation doesn't trigger (confidence already above threshold or no clarify action), this field is omitted from the response.
+
 #### Legacy Endpoint (Deprecated)
 ```bash
 # Still works but includes deprecation warning header
@@ -365,6 +367,91 @@ Embeddings are cached in `.embeddings_cache/` (SQLite) with versioning for repro
 - **Persistence**: Survives restarts, shared across instances
 
 **Note**: `.embeddings_cache/` is gitignored. Delete it to force re-caching.
+
+---
+
+## Negotiation & Clarification
+
+LGDL supports multi-round clarification when initial confidence is below threshold.
+
+### How It Works
+
+When a move matches with **confidence < threshold** and has an **uncertain block with clarify action**, the runtime enters a negotiation loop:
+
+1. Ask clarification question
+2. User responds
+3. Update context with response
+4. Re-match with enriched input
+5. Check stop conditions
+
+**Note**: After successful negotiation, execution continues with the **same move** (no global re-ranking). The enriched input is only used to re-evaluate confidence for the current move.
+
+### Stop Conditions (Priority Order)
+
+1. **Threshold met** (confidence ≥ threshold) → ✓ SUCCESS
+2. **Max rounds** (default: 3) → ✗ FAILURE
+3. **Stagnation** (2 consecutive Δconf < 0.05) → ✗ FAILURE
+
+### Configuration
+
+```bash
+# Enable/disable negotiation (default: enabled)
+export LGDL_NEGOTIATION=1
+
+# Max clarification rounds (default: 3)
+export LGDL_NEGOTIATION_MAX_ROUNDS=3
+
+# Stagnation threshold (default: 0.05)
+export LGDL_NEGOTIATION_EPSILON=0.05
+```
+
+### Error Codes
+
+When things go wrong, you'll see these E200-E2xx errors:
+
+- **E200**: Move has no clarify action in the uncertain block
+  - *When you'll see it*: Negotiation requested but move definition lacks `if uncertain { ask for clarification: "..." }`
+
+- **E201**: Negotiation max iterations exceeded (internal safety limit)
+  - *When you'll see it*: Hard guard tripped — report as bug if encountered
+
+- **E202**: User prompt callback not implemented (stub invoked)
+  - *When you'll see it*: Server lacks prompt channel (OK in tests; mock `_prompt_user()`)
+
+### Manifest Format
+
+Successful or failed negotiation appears in turn manifests:
+
+```json
+{
+  "move_id": "appointment_request",
+  "confidence": 0.88,
+  "negotiation": {
+    "enabled": true,
+    "rounds": [
+      {
+        "n": 1,
+        "q": "Which doctor?",
+        "a": "Dr. Smith",
+        "before": 0.65,
+        "after": 0.88,
+        "delta": 0.23
+      }
+    ],
+    "final_confidence": 0.88,
+    "reason": "threshold_met"
+  }
+}
+```
+
+### Testing
+
+Mock the `_prompt_user` callback in tests:
+
+```python
+with patch.object(runtime, '_prompt_user', return_value="Smith"):
+    result = await runtime.process_turn(...)
+```
 
 ---
 

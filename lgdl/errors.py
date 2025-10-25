@@ -74,3 +74,7 @@ class LearningError(LGDLError):
 # E010: Forbidden expression node (security violation)
 # E011: Expression too complex (length limit exceeded)
 # E012: Numeric value exceeds safe range (magnitude overflow)
+
+# E200: Negotiation requested but no clarify action found
+# E201: Negotiation max iterations exceeded (internal safety limit)
+# E202: User prompt callback not implemented (stub invoked)

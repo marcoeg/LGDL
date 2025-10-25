@@ -12,12 +12,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Golden dialog tests for greeting game (5 scenarios)
 - Multi-game validation with concurrent medical + greeting games
 
+### Added (P1-1)
+- Negotiation loop for multi-round clarification
+- 3 deterministic stop conditions: threshold, max_rounds, stagnation
+- NegotiationLoop, NegotiationRound, NegotiationResult dataclasses
+- Engine integration with single-branch execution guarantee
+- Safe input enrichment with deduplication and length caps
+- Structured negotiation manifest format
+- Config knobs: LGDL_NEGOTIATION, LGDL_NEGOTIATION_MAX_ROUNDS, LGDL_NEGOTIATION_EPSILON
+- E200-E2xx error codes for negotiation failures
+- 6 integration tests covering all stop conditions + edge cases
+
 ### Changed
 - Updated README and CLI examples to use greeting game instead of non-existent er_triage
 - Fixed game.lgdl confidence thresholds for casual greetings (medium instead of high)
 
+### Changed (P1-1)
+- Engine now triggers negotiation when confidence < threshold + clarify action present
+- Turn manifests include negotiation block when negotiation runs
+- Stdout logging: per-round confidence deltas (no PII)
+- Single-branch execution enforced in engine (prevents multiple branches firing)
+
 ### Planned
-- P1-1: Negotiation state management with clarification loops
 - v1.0 Grammar: Capability await/timeout, context guards, learning hooks
 - IR compiler updates for v1.0 features
 
