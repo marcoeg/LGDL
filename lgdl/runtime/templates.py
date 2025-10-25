@@ -2,14 +2,22 @@
 Secure template renderer with arithmetic evaluation.
 
 Supports:
-- {var} and {var.nested}: Direct variable lookup
-- {var?fallback}: Variable with fallback value
-- ${expr}: Arithmetic expressions (validated)
+- {var}: Direct variable lookup from context dictionary
+- {var.nested.path}: Nested dictionary traversal (safe, not Python attribute access)
+- {var?fallback}: Variable with fallback value if missing
+- ${expr}: Arithmetic expressions with AST validation (variables only, no dots)
 
 Security:
-- Whitelist AST node validation
-- Length and magnitude constraints
-- No attribute access, subscripts, calls, or exponentiation
+- Whitelist AST node validation for ${...} expressions
+- Length constraint: max 256 chars per expression
+- Magnitude constraint: ±1e9 numeric limit
+- Forbidden in ${...}: attribute access, subscripts, calls, exponentiation, comprehensions
+
+Key distinction:
+- {user.name} = dictionary traversal (SAFE, allowed)
+- ${user.name} = Python attribute access (UNSAFE, blocked with E010)
+
+Use {user.name} for nested data, ${age + 5} for arithmetic.
 
 Copyright (c) 2025 Graziano Labs Corp.
 """

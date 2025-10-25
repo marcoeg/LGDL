@@ -268,6 +268,45 @@ export LGDL_DEV_MODE=1
 
 ---
 
+## Operational
+
+### Game Registry
+
+The `GameRegistry` (introduced in v1.0-alpha-foundation) manages multiple games concurrently.
+
+**Current Implementation**: In-memory only
+- Games are registered at API startup via `LGDL_GAMES` env var or `--games` CLI flag
+- Registry cleared on server restart
+- No persistence between runs
+
+**Planned** (future enhancement):
+```bash
+# JSON manifest for persistence
+lgdl serve --registry data/registry.json
+
+# SQLite registry for multi-instance coordination
+lgdl serve --registry sqlite:///data/registry.db
+```
+
+**Registry Contents**:
+- Game metadata (id, name, version, file_hash)
+- Compiled IR (in-memory)
+- Per-game runtime instances
+- Last compiled timestamp
+
+**Hot Reload** (dev mode only):
+```bash
+# Reload specific game from disk
+curl -X POST http://127.0.0.1:8000/games/medical/reload
+```
+
+**File Hash Tracking**:
+- SHA256 hash (first 8 chars) computed on registration
+- Used for cache invalidation (planned)
+- Visible in `GET /games` and `GET /games/{id}` responses
+
+---
+
 ## Security
 
 ### Template Security (P0-1)
@@ -275,21 +314,44 @@ export LGDL_DEV_MODE=1
 Templates are validated with AST whitelisting to prevent code injection:
 
 **Allowed**:
-- Variables: `{doctor}`, `{user.name}`
-- Fallbacks: `{doctor?any provider}`
+- Variables: `{doctor}`, `{user_name}`
+- **Nested lookups** (dictionary traversal): `{user.name}`, `{user.profile.age}`
+- Fallbacks: `{doctor?any provider}`, `{user.name?Guest}`
 - Arithmetic: `${age + 5}`, `${(a + b) * 2}`
 - Operators: `+`, `-`, `*`, `/`, `//`, `%`, unary `-`
 
 **Forbidden** (raises SecurityError):
+- **Dotted paths in expressions**: `${user.name}` → E010 (use `{user.name}` instead)
 - Exponentiation: `${2 ** 999}` → E010
 - Function calls: `${len(x)}` → E010
 - Attribute access: `${obj.__class__}` → E010
 - Subscripts: `${data['key']}` → E010
 - Comprehensions, lambdas, etc. → E010
 
+**Key Distinction**:
+- ✅ `{user.name}` - Dictionary traversal (safe, allowed)
+- ❌ `${user.name}` - Python attribute access (unsafe, blocked)
+
 **Limits**:
 - Max expression length: 256 chars → E011
 - Max magnitude: ±1e9 → E012
+
+**Examples**:
+```python
+# Safe variable lookups with nesting
+"{doctor}"           # Direct lookup
+"{user.name}"        # Nested dictionary: context["user"]["name"]
+"{user.name?Guest}"  # With fallback
+
+# Safe arithmetic (variables only, no dots)
+"${age + 5}"         # Works if context = {"age": 30}
+"${(a + b) * 2}"     # Works if context = {"a": 5, "b": 10}
+
+# Blocked for security
+"${user.name}"       # ❌ Attribute access in expression
+"${__import__('os')}" # ❌ Function call
+"${2 ** 999}"        # ❌ CPU bomb risk
+```
 
 ---
 

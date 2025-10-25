@@ -34,15 +34,39 @@ def compile(path, out):
     required=True,
     help="Comma-separated game_id:path pairs (e.g., 'medical:examples/medical/game.lgdl')"
 )
-@click.option("--port", default=8000, help="Server port")
-@click.option("--dev", is_flag=True, help="Enable dev mode (hot reload)")
+@click.option("--port", default=8000, help="Server port (default: 8000)")
+@click.option("--dev", is_flag=True, help="Enable dev mode with hot reload endpoint")
 def serve(games: str, port: int, dev: bool):
     """
-    Start API server with multiple games.
+    Start multi-game LGDL API server.
 
-    Example:
+    \b
+    Examples:
+      # Single game
+      lgdl serve --games medical:examples/medical/game.lgdl
 
-        lgdl serve --games medical:examples/medical/game.lgdl,er:examples/er_triage.lgdl
+      # Multiple games
+      lgdl serve --games medical:examples/medical/game.lgdl,er:examples/er.lgdl
+
+      # Custom port
+      lgdl serve --games medical:examples/medical/game.lgdl --port 8080
+
+      # Dev mode (enables POST /games/{id}/reload for hot reload)
+      lgdl serve --games medical:examples/medical/game.lgdl --dev
+
+    \b
+    API Endpoints:
+      GET  /healthz             - Health check with game count
+      GET  /games               - List all games
+      GET  /games/{id}          - Get game metadata
+      POST /games/{id}/move     - Execute move in game
+      POST /games/{id}/reload   - Hot reload game (dev mode only)
+      POST /move                - Legacy endpoint (deprecated)
+
+    \b
+    Environment Variables:
+      LGDL_GAMES      - Alternative to --games flag
+      LGDL_DEV_MODE   - Alternative to --dev flag (set to "1")
     """
     import os, uvicorn
     from pathlib import Path

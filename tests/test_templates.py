@@ -411,3 +411,44 @@ def test_whitespace_in_expressions():
     r = TemplateRenderer()
     assert r.render("${  x  +  y  }", {"x": 1, "y": 2}) == "3"
     assert r.render("${x+y}", {"x": 1, "y": 2}) == "3"
+
+
+def test_dotted_path_in_variable_vs_expression():
+    """Dotted paths: allowed in {var}, forbidden in ${expr}."""
+    r = TemplateRenderer()
+
+    # Allowed: {user.name} uses dictionary traversal
+    context = {"user": {"name": "Alice", "age": 30}}
+    assert r.render("{user.name}", context) == "Alice"
+    assert r.render("{user.age}", context) == "30"
+    assert r.render("{user.name?Guest}", context) == "Alice"
+
+    # Forbidden: ${user.name} would use Python attribute access
+    with pytest.raises(SecurityError) as exc:
+        r.render("${user.name}", context)
+    assert exc.value.code == "E010"
+    assert "Attribute" in exc.value.message
+
+    # Workaround: use separate variables in arithmetic
+    # ${user_age + 5} works if context = {"user_age": 30}
+    context_flat = {"user_age": 30}
+    assert r.render("${user_age + 5}", context_flat) == "35"
+
+
+def test_deep_nesting_in_variables():
+    """Deeply nested dictionary paths work in {var} syntax."""
+    r = TemplateRenderer()
+    context = {
+        "user": {
+            "profile": {
+                "settings": {
+                    "theme": "dark"
+                }
+            }
+        }
+    }
+    assert r.render("{user.profile.settings.theme}", context) == "dark"
+    assert r.render("{user.profile.settings.theme?light}", context) == "dark"
+
+    # Missing nested path uses fallback
+    assert r.render("{user.profile.missing?default}", context) == "default"
