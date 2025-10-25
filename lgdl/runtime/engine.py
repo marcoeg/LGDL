@@ -1,4 +1,4 @@
-import uuid, re
+import uuid
 from typing import Dict, Any
 from pathlib import Path
 from ..parser.parser import parse_lgdl
@@ -7,16 +7,7 @@ from .matcher import TwoStageMatcher
 from .firewall import sanitize
 from .policy import PolicyGuard
 from .capability import CapabilityClient
-
-def _subst_template(text: str, params: Dict[str, Any]) -> str:
-    def repl(m):
-        key = m.group(1)
-        fallback = None
-        if "?" in key:
-            key, fallback = key.split("?",1)
-        val = params.get(key)
-        return str(val if val is not None and val != "" else (fallback or ""))
-    return re.sub(r"\{([A-Za-z_][A-Za-z0-9_\.]*(\?[^\}]+)?)\}", repl, text)
+from .templates import TemplateRenderer
 
 def eval_condition(cond: Dict[str, Any], score: float, threshold: float, last_status: str, ctx: Dict[str, Any]) -> bool:
     if not cond:
@@ -59,6 +50,7 @@ class LGDLRuntime:
         self.matcher = TwoStageMatcher()
         self.policy = PolicyGuard(allowlist={"check_availability"})
         self.cap = CapabilityClient(str(Path(__file__).resolve().parents[2] / "examples" / "medical" / "capability_contract.json"))
+        self.templates = TemplateRenderer()
 
     async def process_turn(self, conversation_id: str, user_id: str, text: str, context: Dict[str, Any]):
         cleaned, flagged = sanitize(text)
@@ -117,7 +109,7 @@ class LGDLRuntime:
         data = action.get("data", {})
         status = "ok"
         if atype == "respond":
-            return _subst_template(data.get("text",""), params), None, status
+            return self.templates.render(data.get("text",""), params), None, status
         if atype == "offer_choices":
             return "Options: " + ", ".join(data.get("choices", [])), None, status
         if atype == "capability":
