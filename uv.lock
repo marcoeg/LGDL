@@ -303,6 +303,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pyyaml" },
@@ -317,6 +318,7 @@ openai = [
 requires-dist = [
     { name = "click", specifier = ">=8.1,<9" },
     { name = "fastapi", specifier = ">=0.112,<1" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27,<1" },
     { name = "httpx", marker = "extra == 'openai'", specifier = ">=0.27,<1" },
     { name = "jsonschema", specifier = ">=4.22,<5" },
     { name = "lark", specifier = ">=1.1,<2" },
