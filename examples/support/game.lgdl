@@ -180,7 +180,7 @@ game customer_support {
       }
 
       when confident {
-        respond with: "Processing refund for {item}. Amount: ${refund_amount?0}. Refund will appear in 3-5 business days."
+        respond with: "Processing refund for {item}. Amount: {refund_amount?0}. Refund will appear in 3-5 business days."
         billing.process_refund for "refund" timeout 5
       }
 

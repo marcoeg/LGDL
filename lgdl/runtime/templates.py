@@ -24,9 +24,12 @@ Copyright (c) 2025 Graziano Labs Corp.
 
 import ast
 import re
+import logging
 from typing import Any, Dict
 
 from ..errors import TemplateError, SecurityError
+
+logger = logging.getLogger(__name__)
 
 # Security configuration
 MAX_EXPR_LENGTH = 256
@@ -175,9 +178,40 @@ class TemplateRenderer:
             tree = ast.parse(expr, mode='eval')
             SafeArithmeticValidator().visit(tree)
 
+            # Extract variable names from expression
+            var_names = set(re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', expr))
+
+            # Create safe context with defaults for missing variables
+            # This prevents HTTP 500 errors when capability responses are incomplete
+            safe_context = {}
+            missing_vars = []
+            for var in var_names:
+                if var in context:
+                    val = context[var]
+                    # Try to convert strings to numbers for arithmetic
+                    if isinstance(val, str):
+                        try:
+                            # Try int first, then float
+                            safe_context[var] = int(val) if '.' not in val else float(val)
+                        except (ValueError, AttributeError):
+                            safe_context[var] = 0  # Default if conversion fails
+                            missing_vars.append(f"{var} (unconvertible string)")
+                    else:
+                        safe_context[var] = val
+                else:
+                    safe_context[var] = 0  # Safe default for arithmetic
+                    missing_vars.append(var)
+
+            # Log warning if we're using defaults (helps with debugging)
+            if missing_vars:
+                logger.warning(
+                    f"Template arithmetic using defaults for missing variables: {missing_vars} "
+                    f"in expression: {expr}"
+                )
+
             # Compile with no builtins
             code = compile(tree, '<template>', 'eval')
-            result = eval(code, {"__builtins__": {}}, context)
+            result = eval(code, {"__builtins__": {}}, safe_context)
 
             # Magnitude constraint
             if isinstance(result, (int, float)):

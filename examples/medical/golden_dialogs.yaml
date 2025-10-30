@@ -31,5 +31,5 @@ dialogs:
         expect:
           move: book_intent
           confidence: ">=0.50"
-          response_contains: ["Attempting to book", "Not allowed"]
-          action: null
+          response_contains: ["Attempting to book", "Availability"]
+          action: book

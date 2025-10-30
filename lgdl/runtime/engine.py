@@ -208,11 +208,18 @@ class LGDLRuntime:
             # Check if capabilities are enabled
             if not self.cap:
                 return "Capabilities not configured.", None, "err"
+            # Build payload from all non-None params (generalized for all games)
             payload = {}
-            for k in ("doctor","date"):
-                if k in params and params[k] is not None:
-                    payload[k] = params[k]
+            for k, v in params.items():
+                if v is not None and not k.startswith("_"):
+                    payload[k] = v
             res = await self.cap.execute(f'{call.get("service")}.{func}', payload)
+
+            # Merge response data into params for subsequent template rendering
+            # This enables templates to use values like ${base_price * quantity}
+            if "data" in res and isinstance(res["data"], dict):
+                params.update(res["data"])
+
             return res.get("message",""), func, status
         if atype in ("continue","return"):
             return "", None, status
