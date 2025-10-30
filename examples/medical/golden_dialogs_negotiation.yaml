@@ -1,0 +1,156 @@
+# Golden Dialogs for Negotiation Testing (P1-1)
+#
+# NOTE: These are ASPIRATIONAL tests for v2.0 with full state management.
+# Current v1.0-alpha limitation: Negotiation loop exists but _prompt_user()
+# has NotImplementedError - cannot execute multi-round clarification yet.
+#
+# When v2.0 state management is implemented, these tests will validate:
+# - Threshold-met success (stop condition 1)
+# - Max-rounds timeout (stop condition 2)
+# - No-information-gain stagnation (stop condition 3)
+#
+# See: docs/P0_P1_CRITICAL_FIXES.md section P1-1 for full implementation plan
+# See: README.md "Known Limitations" section for current state
+
+game: medical_scheduling
+version: 0.1
+
+# ASPIRATIONAL MULTI-TURN TESTS (Require v2.0 state management)
+dialogs:
+  - name: two_round_clarification_success
+    description: "User provides missing info, confidence crosses threshold (STOP CONDITION 1)"
+    status: aspirational_v2
+    turns:
+      - input: "I need to see a doctor"
+        expect:
+          move: appointment_request
+          confidence: "<=0.70"
+          # Would trigger negotiation: confidence < threshold
+          # Round 1: System asks "Which doctor?"
+
+      - input: "Dr. Smith"
+        # User's clarification response enriches context
+        expect:
+          move: appointment_request
+          confidence: ">=0.80"
+          response_contains: ["availability", "Smith"]
+          negotiation:
+            enabled: true
+            rounds: 1
+            reason: "threshold_met"
+            history:
+              - question: "Which doctor?"
+                answer: "Dr. Smith"
+                confidence_delta: 0.25
+
+  - name: max_rounds_abort
+    description: "User provides unhelpful responses, hits max rounds (STOP CONDITION 2)"
+    status: aspirational_v2
+    turns:
+      - input: "I need something"
+        expect:
+          move: general_inquiry
+          confidence: "<=0.40"
+          # Would trigger negotiation
+
+      - input: "I don't know"
+        # Round 1 - unhelpful response, small confidence gain
+
+      - input: "Not sure"
+        # Round 2 - unhelpful response, small confidence gain
+
+      - input: "Maybe?"
+        # Round 3 - hits max_rounds limit
+        expect:
+          move: general_inquiry
+          negotiation:
+            enabled: true
+            rounds: 3
+            reason: "max_rounds_exceeded"
+          response_contains: ["wasn't able to understand", "clarifications"]
+
+  - name: no_gain_abort_stagnation
+    description: "Confidence plateaus after 2 consecutive low-delta rounds (STOP CONDITION 3)"
+    status: aspirational_v2
+    turns:
+      - input: "book something"
+        expect:
+          move: book_intent
+          confidence: "<=0.50"
+          # Would trigger negotiation
+
+      - input: "appointment"
+        # Round 1 - meaningful gain (Δ = +0.12)
+        expect:
+          confidence: "~0.62"
+
+      - input: "yes"
+        # Round 2 - no gain (Δ = +0.02 < epsilon=0.05)
+        expect:
+          confidence: "~0.64"
+
+      - input: "uh huh"
+        # Round 3 - no gain again (Δ = +0.01 < epsilon)
+        # Triggers stagnation: 2 consecutive rounds with Δ < 0.05
+        expect:
+          move: book_intent
+          negotiation:
+            enabled: true
+            rounds: 3
+            reason: "no_information_gain"
+            stagnation_rounds: 2
+          response_contains: ["wasn't able", "understand"]
+
+# SINGLE-TURN TESTS (Currently working in v1.0-alpha)
+# These validate that negotiation metadata is included when confidence < threshold
+
+  - name: negotiation_metadata_present_when_uncertain
+    description: "Low confidence produces negotiation metadata in response (v1.0 behavior)"
+    status: working_v1
+    turns:
+      - input: "I need to see someone"
+        expect:
+          move: appointment_request
+          confidence: "<=0.70"
+          # In v1.0: negotiation attempted but _prompt_user raises NotImplementedError
+          # System catches error and returns metadata showing negotiation was considered
+          # In v2.0: would trigger actual negotiation loop
+
+  - name: no_negotiation_when_confident
+    description: "High confidence skips negotiation entirely (v1.0 behavior)"
+    status: working_v1
+    turns:
+      - input: "I need to see Dr. Smith"
+        expect:
+          move: appointment_request
+          confidence: ">=0.80"
+          response_contains: ["availability", "Smith"]
+          # No negotiation field in response - confidence above threshold
+
+# EDGE CASES
+
+  - name: negotiation_e200_no_clarify_action
+    description: "Error E200 when move lacks clarify action"
+    status: aspirational_v2
+    turns:
+      - input: "test input for move without clarify"
+        expect:
+          error_code: "E200"
+          error_message_contains: ["no clarify action found"]
+          hint_contains: ["add 'if uncertain'"]
+
+# IMPLEMENTATION NOTES:
+#
+# To make these tests work in v2.0:
+# 1. Implement LGDLRuntime._prompt_user() with async channel
+# 2. Add conversation state tracking (store history, params)
+# 3. Enable enriched input reconstruction from multi-turn context
+# 4. Update golden test runner to handle multi-turn stateful dialogs
+# 5. Add negotiation-specific assertions (rounds, deltas, reasons)
+#
+# Current test counts:
+# - Aspirational (v2.0): 4 tests
+# - Working (v1.0): 2 tests
+# - Total: 6 golden dialog tests
+#
+# When v2.0 lands, update status: aspirational_v2 → working_v2

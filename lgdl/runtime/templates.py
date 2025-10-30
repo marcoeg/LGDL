@@ -194,20 +194,21 @@ class TemplateRenderer:
                             # Try int first, then float
                             safe_context[var] = int(val) if '.' not in val else float(val)
                         except (ValueError, AttributeError):
-                            safe_context[var] = 0  # Default if conversion fails
-                            missing_vars.append(f"{var} (unconvertible string)")
+                            # E001: Cannot convert variable to number
+                            raise TemplateError(
+                                code="E001",
+                                message=f"Cannot convert variable '{var}' (value: '{val}') to number in expression: {expr}",
+                                hint="Ensure variables used in arithmetic are numeric or convertible to numbers"
+                            )
                     else:
                         safe_context[var] = val
                 else:
-                    safe_context[var] = 0  # Safe default for arithmetic
-                    missing_vars.append(var)
-
-            # Log warning if we're using defaults (helps with debugging)
-            if missing_vars:
-                logger.warning(
-                    f"Template arithmetic using defaults for missing variables: {missing_vars} "
-                    f"in expression: {expr}"
-                )
+                    # E001: Undefined variable in arithmetic expression
+                    raise TemplateError(
+                        code="E001",
+                        message=f"Undefined variable '{var}' in arithmetic expression: {expr}",
+                        hint="Ensure all variables used in ${...} expressions are provided in the context"
+                    )
 
             # Compile with no builtins
             code = compile(tree, '<template>', 'eval')
