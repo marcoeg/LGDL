@@ -1,0 +1,147 @@
+game online_shopping {
+  description: "E-commerce shopping assistant with price calculations and smart negotiation."
+
+  capabilities {
+    product_catalog: ["search_products", "get_price", "check_inventory"]
+    cart_system: ["add_item", "remove_item", "calculate_total"]
+    payment_system: ["process_payment"]
+  }
+
+  moves {
+    move product_search {
+      when user says something like: [
+        "looking for {category}" (fuzzy),
+        "find me {product}" (fuzzy),
+        "search for {product}" (strict),
+        "I need {product}",
+        "show me {category} items",
+        "browsing {category}"
+      ]
+      confidence: medium
+
+      if uncertain {
+        ask for clarification: "What category are you interested in? Electronics, clothing, or home goods?"
+      }
+
+      when confident {
+        respond with: "Great {user.name?there}! I'll search for {category?products} for you."
+        product_catalog.search_products for "search" timeout 3
+      }
+    }
+
+    move price_inquiry {
+      when user says something like: [
+        "how much is {product}" (strict),
+        "price for {product}",
+        "cost of {quantity} {product}",
+        "what does {product} cost",
+        "{product} price"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "The {product} costs {base_price?99}. For {quantity?1} items, that's ${base_price * quantity} total."
+        product_catalog.get_price for "pricing" timeout 2
+      }
+    }
+
+    move add_to_cart {
+      when user says something like: [
+        "add {product} to cart" (strict),
+        "I'll take {quantity} {product}",
+        "put {product} in my cart",
+        "buy {quantity} {product}",
+        "add {product}"
+      ]
+      confidence: medium
+
+      if uncertain {
+        ask for clarification: "How many {product?items} would you like to add?"
+      }
+
+      when confident {
+        respond with: "Added {quantity?1} {product} to your cart. Your cart total is now ${cart_total + (item_price * quantity)}."
+        cart_system.add_item for "cart update" timeout 2
+      }
+    }
+
+    move apply_discount {
+      when user says something like: [
+        "apply discount code {code}" (strict),
+        "use coupon {code}",
+        "I have a promo code {code}",
+        "discount code {code}"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "Discount applied! Original: {cart_total?0}, Discount: {discount_amount?0}, New total: ${cart_total - discount_amount}."
+      }
+    }
+
+    move checkout {
+      when user says something like: [
+        "checkout" (strict),
+        "proceed to checkout",
+        "ready to pay",
+        "complete my order",
+        "finalize purchase"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "Processing checkout for {user.name?valued customer}. Total: {cart_total?0} using {user.payment.method?credit card}."
+        payment_system.process_payment for "payment" timeout 5
+      }
+    }
+
+    move view_cart {
+      when user says something like: [
+        "show my cart" (strict),
+        "what's in my cart",
+        "view cart",
+        "my cart",
+        "cart summary"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "Your cart contains {cart_items?no items}. Total: {cart_total?0}."
+      }
+    }
+
+    move compare_prices {
+      when user says something like: [
+        "compare {product1} and {product2}",
+        "which is cheaper {product1} or {product2}",
+        "price difference between {product1} and {product2}"
+      ]
+      confidence: medium
+
+      if uncertain {
+        offer choices: ["Show both prices", "Recommend cheaper option"]
+      }
+
+      when confident {
+        respond with: "{product1} costs {price1?100}, {product2} costs {price2?100}. Difference: ${price1 - price2}."
+      }
+    }
+
+    move bulk_order {
+      when user says something like: [
+        "bulk order {quantity} {product}",
+        "order {quantity} {product} for business" (context-sensitive),
+        "wholesale {quantity} {product}"
+      ]
+      confidence: medium
+
+      if uncertain {
+        ask for clarification: "How many units of {product} do you need for your bulk order?"
+      }
+
+      when confident {
+        respond with: "Bulk order: {quantity} x {product} = ${unit_price * quantity}. Bulk discount: ${(unit_price * quantity) / 10}. Final: ${(unit_price * quantity) - ((unit_price * quantity) / 10)}."
+      }
+    }
+  }
+}

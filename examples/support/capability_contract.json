@@ -1,0 +1,70 @@
+{
+  "service": "customer_support",
+  "version": "1.0",
+  "capabilities": {
+    "ticketing": {
+      "functions": {
+        "create_ticket": {
+          "description": "Create new support ticket",
+          "parameters": ["issue_type", "description", "priority"],
+          "returns": "ticket_id",
+          "timeout_ms": 3000
+        },
+        "update_ticket": {
+          "description": "Update existing ticket",
+          "parameters": ["ticket_id", "updates"],
+          "returns": "updated_ticket",
+          "timeout_ms": 2000
+        },
+        "close_ticket": {
+          "description": "Close resolved ticket",
+          "parameters": ["ticket_id", "resolution"],
+          "returns": "confirmation",
+          "timeout_ms": 2000
+        }
+      }
+    },
+    "auth_system": {
+      "functions": {
+        "reset_password": {
+          "description": "Initiate password reset",
+          "parameters": ["account_email"],
+          "returns": "reset_token",
+          "timeout_ms": 5000
+        },
+        "verify_account": {
+          "description": "Verify account identity",
+          "parameters": ["account_id", "verification_code"],
+          "returns": "verification_status",
+          "timeout_ms": 4000
+        }
+      }
+    },
+    "billing": {
+      "functions": {
+        "check_account": {
+          "description": "Check billing account status",
+          "parameters": ["account_id"],
+          "returns": "account_details",
+          "timeout_ms": 3000
+        },
+        "process_refund": {
+          "description": "Process refund request",
+          "parameters": ["order_id", "amount", "reason"],
+          "returns": "refund_confirmation",
+          "timeout_ms": 5000
+        }
+      }
+    },
+    "knowledge_base": {
+      "functions": {
+        "search_faq": {
+          "description": "Search FAQ and knowledge base",
+          "parameters": ["query"],
+          "returns": "relevant_articles",
+          "timeout_ms": 2000
+        }
+      }
+    }
+  }
+}

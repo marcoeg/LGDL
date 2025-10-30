@@ -1,0 +1,72 @@
+{
+  "service": "restaurant",
+  "version": "1.0",
+  "capabilities": {
+    "reservation_system": {
+      "functions": {
+        "check_availability": {
+          "description": "Check table availability for date/time/party size",
+          "parameters": ["date", "time", "party_size"],
+          "returns": "availability_status",
+          "timeout_ms": 3000
+        },
+        "create_reservation": {
+          "description": "Create new reservation",
+          "parameters": ["date", "time", "party_size", "customer_info"],
+          "returns": "confirmation_code",
+          "timeout_ms": 4000
+        },
+        "cancel_reservation": {
+          "description": "Cancel existing reservation",
+          "parameters": ["confirmation_code"],
+          "returns": "cancellation_status",
+          "timeout_ms": 2000
+        },
+        "modify_reservation": {
+          "description": "Modify existing reservation details",
+          "parameters": ["confirmation_code", "new_date", "new_time", "new_party_size"],
+          "returns": "updated_reservation",
+          "timeout_ms": 3000
+        }
+      }
+    },
+    "menu_service": {
+      "functions": {
+        "get_menu": {
+          "description": "Retrieve menu items",
+          "parameters": ["meal_type", "dietary_filters"],
+          "returns": "menu_items",
+          "timeout_ms": 2000
+        },
+        "check_dish_availability": {
+          "description": "Check if specific dish is available",
+          "parameters": ["dish_name", "date"],
+          "returns": "availability",
+          "timeout_ms": 1500
+        },
+        "get_allergen_info": {
+          "description": "Get allergen information for dishes",
+          "parameters": ["dish_name", "allergens"],
+          "returns": "allergen_details",
+          "timeout_ms": 3000
+        }
+      }
+    },
+    "seating": {
+      "functions": {
+        "assign_table": {
+          "description": "Assign specific table/location",
+          "parameters": ["party_size", "preferences"],
+          "returns": "table_assignment",
+          "timeout_ms": 2000
+        },
+        "calculate_capacity": {
+          "description": "Calculate seating capacity needs",
+          "parameters": ["party_size"],
+          "returns": "capacity_requirements",
+          "timeout_ms": 1000
+        }
+      }
+    }
+  }
+}

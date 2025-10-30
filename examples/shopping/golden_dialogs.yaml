@@ -1,0 +1,98 @@
+game: online_shopping
+version: 0.1
+dialogs:
+  - name: product_search_confident
+    turns:
+      - input: "looking for laptops"
+        expect:
+          move: product_search
+          confidence: ">=0.75"
+          response_contains: ["search", "laptops"]
+
+  - name: product_search_negotiation
+    turns:
+      - input: "I'm looking for something"
+        expect:
+          move: product_search
+          confidence: "<=0.65"
+          response_contains: ["category", "Electronics", "clothing", "home goods"]
+
+  - name: price_inquiry_simple
+    turns:
+      - input: "how much is laptop"
+        expect:
+          move: price_inquiry
+          confidence: ">=0.85"
+          response_contains: ["costs", "laptop"]
+
+  - name: price_inquiry_with_quantity
+    turns:
+      - input: "price for 3 laptops"
+        expect:
+          move: price_inquiry
+          confidence: ">=0.80"
+          response_contains: ["3", "items"]
+
+  - name: add_to_cart_confident
+    turns:
+      - input: "add laptop to cart"
+        expect:
+          move: add_to_cart
+          confidence: ">=0.85"
+          response_contains: ["Added", "cart"]
+
+  - name: add_to_cart_with_quantity
+    turns:
+      - input: "I'll take 5 keyboards"
+        expect:
+          move: add_to_cart
+          confidence: ">=0.75"
+          response_contains: ["5", "keyboards", "cart"]
+
+  - name: apply_discount_code
+    turns:
+      - input: "apply discount code SAVE20"
+        expect:
+          move: apply_discount
+          confidence: ">=0.90"
+          response_contains: ["Discount applied", "SAVE20"]
+
+  - name: checkout_process
+    turns:
+      - input: "checkout"
+        expect:
+          move: checkout
+          confidence: ">=0.95"
+          response_contains: ["Processing checkout", "Total"]
+
+  - name: view_cart_summary
+    turns:
+      - input: "show my cart"
+        expect:
+          move: view_cart
+          confidence: ">=0.90"
+          response_contains: ["cart contains", "Total"]
+
+  - name: compare_prices_confident
+    turns:
+      - input: "compare laptop and tablet"
+        expect:
+          move: compare_prices
+          confidence: ">=0.70"
+          response_contains: ["laptop", "tablet", "costs"]
+
+  - name: bulk_order_negotiation
+    turns:
+      - input: "bulk order keyboards"
+        expect:
+          move: bulk_order
+          confidence: "<=0.70"
+          response_contains: ["How many", "bulk order"]
+
+  - name: bulk_order_confident
+    turns:
+      - input: "wholesale 100 mice"
+        expect:
+          move: bulk_order
+          confidence: ">=0.65"
+          response_contains: ["100", "mice", "Bulk"]

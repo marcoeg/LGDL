@@ -1,0 +1,226 @@
+game restaurant_booking {
+  description: "Restaurant reservation system with fuzzy matching, time arithmetic, and dietary accommodations."
+
+  capabilities {
+    reservation_system: ["check_availability", "create_reservation", "cancel_reservation", "modify_reservation"]
+    menu_service: ["get_menu", "check_dish_availability", "get_allergen_info"]
+    seating: ["assign_table", "calculate_capacity"]
+  }
+
+  moves {
+    move reservation {
+      when user says something like: [
+        "book table for {party_size}" (fuzzy),
+        "reservation for {party_size} at {time}" (fuzzy),
+        "table for {party_size} on {date}",
+        "reserve {party_size} seats",
+        "I need a table for {party_size} people"
+      ]
+      confidence: medium
+
+      if uncertain {
+        ask for clarification: "When would you like to dine? Please provide date and time."
+      }
+
+      when confident {
+        respond with: "Booking table for {party_size} on {date?today} at {time?7pm}. We'll prepare ${party_size * 2} seats for you."
+        reservation_system.check_availability for "availability check" timeout 3
+      }
+
+      when successful {
+        respond with: "Reservation confirmed! Table for {party_size} at {time} on {date}. Confirmation: {confirmation_code?REF123}."
+        reservation_system.create_reservation for "create booking" timeout 4
+      }
+
+      when failed {
+        offer choices: ["Try different time", "Join waitlist", "Cancel"]
+      }
+    }
+
+    move menu_inquiry {
+      when user says something like: [
+        "what's on the menu" (fuzzy),
+        "do you have {dish}" (context-sensitive),
+        "menu for {meal_type}",
+        "show me {cuisine} dishes",
+        "what do you serve"
+      ]
+      confidence: medium
+
+      when confident {
+        respond with: "Our {meal_type?dinner} menu features {dish.name?various dishes}. Price: {dish.price?market price}."
+        menu_service.get_menu for "menu query" timeout 2
+      }
+
+      when successful {
+        respond with: "Here's our menu. {dish.name} is available for {dish.price?market price}."
+      }
+    }
+
+    move special_request {
+      when user says something like: [
+        "allergic to {ingredient}" (learned),
+        "no {ingredient}" (fuzzy),
+        "vegetarian options",
+        "vegan menu",
+        "gluten free {dish}",
+        "dietary restriction {restriction}"
+      ]
+      confidence: medium
+
+      if uncertain {
+        ask for clarification: "Which dietary restriction should I note for your reservation?"
+      }
+
+      when confident {
+        respond with: "Noted: {restriction?dietary restriction} for {user.name?your party}. We'll ensure no {ingredient?allergens} in your meal."
+        menu_service.get_allergen_info for "allergen check" timeout 3
+      }
+    }
+
+    move cancel_reservation {
+      when user says something like: [
+        "cancel my reservation" (strict),
+        "cancel booking for {date}" (strict),
+        "cancel table {confirmation_code}",
+        "I need to cancel"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "Canceling reservation {confirmation_code?} for {date?}. Are you sure?"
+        reservation_system.cancel_reservation for "cancellation" timeout 2
+      }
+
+      when successful {
+        respond with: "Reservation {confirmation_code} canceled successfully."
+      }
+
+      when failed {
+        respond with: "Couldn't find reservation {confirmation_code?}. Please check your confirmation number."
+      }
+    }
+
+    move modify_reservation {
+      when user says something like: [
+        "change my reservation to {time}",
+        "move booking to {date}",
+        "update party size to {party_size}",
+        "reschedule for {time} on {date}"
+      ]
+      confidence: medium
+
+      if uncertain {
+        ask for clarification: "What would you like to change? Date, time, or party size?"
+      }
+
+      when confident {
+        respond with: "Updating reservation {confirmation_code?} to {party_size?original size} people on {date?original date} at {time?original time}."
+        reservation_system.modify_reservation for "modification" timeout 3
+      }
+
+      when successful {
+        respond with: "Reservation updated! New time: {time}, New party size: {party_size}. Chairs needed: ${party_size * 2}."
+      }
+
+      when failed {
+        respond with: "Unable to modify reservation. {time?That time} may not be available."
+        offer choices: ["Try different time", "Cancel and rebook", "Keep original"]
+      }
+    }
+
+    move special_occasion {
+      when user says something like: [
+        "celebrating {occasion}",
+        "it's a {occasion}",
+        "{occasion} dinner",
+        "special occasion"
+      ]
+      confidence: low
+
+      if uncertain {
+        ask for clarification: "What's the occasion? Birthday, anniversary, or other celebration?"
+      }
+
+      when confident {
+        respond with: "Wonderful! We'll make your {occasion?special occasion} memorable. Would you like a special dessert or champagne?"
+      }
+    }
+
+    move table_preference {
+      when user says something like: [
+        "I want {location} seating" (context-sensitive),
+        "prefer {location} table",
+        "window seat",
+        "outdoor table",
+        "booth"
+      ]
+      confidence: medium
+
+      when confident {
+        respond with: "Requesting {location?preferred} seating for your party of {party_size?2}. Subject to availability."
+        seating.assign_table for "table assignment" timeout 2
+      }
+    }
+
+    move group_booking {
+      when user says something like: [
+        "large group of {party_size}",
+        "party of {party_size} people" (context-sensitive),
+        "group reservation {party_size}",
+        "book for {party_size} guests"
+      ]
+      confidence: medium
+
+      if party_size > 8 {
+        respond with: "For large groups ({party_size}), we recommend our private dining room. Capacity: ${party_size + 4} with extra seating."
+        escalate to: events_team
+      } else {
+        respond with: "Booking for {party_size} guests. Total seats: ${party_size * 2}."
+        reservation_system.create_reservation for "group booking" timeout 4
+      }
+    }
+
+    move wait_time_inquiry {
+      when user says something like: [
+        "how long is the wait",
+        "wait time for {party_size}",
+        "current wait",
+        "how busy are you"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "Current wait for {party_size?2} is {wait_time?15} minutes. Table will be ready around ${current_time + wait_time} minutes from now."
+      }
+    }
+
+    move hours_inquiry {
+      when user says something like: [
+        "what are your hours" (strict),
+        "when do you open",
+        "when do you close",
+        "are you open on {day}"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "We're open {hours?11am-10pm} {day?daily}. Kitchen closes 30 minutes before closing."
+      }
+    }
+
+    move price_range_inquiry {
+      when user says something like: [
+        "how expensive",
+        "price range",
+        "what's the cost",
+        "average price per person"
+      ]
+      confidence: medium
+
+      when confident {
+        respond with: "Average price per person: {avg_price?45}. For {party_size?2} people, expect around ${avg_price * party_size}."
+      }
+    }
+  }
+}

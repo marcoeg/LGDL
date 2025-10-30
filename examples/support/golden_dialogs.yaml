@@ -1,0 +1,146 @@
+game: customer_support
+version: 0.1
+dialogs:
+  - name: issue_report_uncertain
+    turns:
+      - input: "I have a problem"
+        expect:
+          move: issue_report
+          confidence: "<=0.50"
+          response_contains: ["Technical", "Billing", "General"]
+
+  - name: issue_report_confident
+    turns:
+      - input: "I need help with login"
+        expect:
+          move: issue_report
+          confidence: ">=0.60"
+          response_contains: ["help", "login"]
+
+  - name: technical_critical_escalation
+    turns:
+      - input: "technical problem with server"
+        expect:
+          move: technical_issue
+          confidence: ">=0.70"
+          response_contains: ["server", "issue"]
+
+  - name: technical_medium_priority
+    turns:
+      - input: "bug in dashboard"
+        expect:
+          move: technical_issue
+          confidence: ">=0.70"
+          response_contains: ["dashboard", "issue"]
+
+  - name: billing_question_confident
+    turns:
+      - input: "billing question"
+        expect:
+          move: billing_question
+          confidence: ">=0.85"
+          response_contains: ["account"]
+
+  - name: billing_with_item
+    turns:
+      - input: "charge on my account"
+        expect:
+          move: billing_question
+          confidence: ">=0.75"
+          response_contains: ["check", "account"]
+
+  - name: reset_password_strict
+    turns:
+      - input: "reset password"
+        expect:
+          move: reset_password
+          confidence: ">=0.90"
+          response_contains: ["reset", "password"]
+
+  - name: forgot_password
+    turns:
+      - input: "forgot password"
+        expect:
+          move: reset_password
+          confidence: ">=0.90"
+          response_contains: ["reset", "password"]
+
+  - name: general_help_uncertain
+    turns:
+      - input: "help"
+        expect:
+          move: general_help
+          confidence: "<=0.60"
+          response_contains: ["Account", "Technical", "Billing"]
+
+  - name: general_help_confident
+    turns:
+      - input: "I need assistance"
+        expect:
+          move: general_help
+          confidence: ">=0.50"
+          response_contains: ["help", "assist"]
+
+  - name: escalate_to_human
+    turns:
+      - input: "speak to a human"
+        expect:
+          move: escalate_request
+          confidence: ">=0.90"
+          response_contains: ["Escalating", "human agent"]
+
+  - name: escalate_supervisor
+    turns:
+      - input: "I want a manager"
+        expect:
+          move: escalate_request
+          confidence: ">=0.85"
+          response_contains: ["Escalating", "agent"]
+
+  - name: account_verification_strict
+    turns:
+      - input: "verify my account"
+        expect:
+          move: account_verification
+          confidence: ">=0.90"
+          response_contains: ["verify", "account", "email"]
+
+  - name: refund_request_confident
+    turns:
+      - input: "I want a refund for laptop"
+        expect:
+          move: refund_request
+          confidence: ">=0.80"
+          response_contains: ["refund", "laptop"]
+
+  - name: refund_request_negotiation
+    turns:
+      - input: "I want a refund"
+        expect:
+          move: refund_request
+          confidence: "<=0.65"
+          response_contains: ["Which item", "order number"]
+
+  - name: check_ticket_status
+    turns:
+      - input: "status of ticket 12345"
+        expect:
+          move: check_status
+          confidence: ">=0.90"
+          response_contains: ["12345", "status"]
+
+  - name: close_ticket_resolved
+    turns:
+      - input: "close ticket 12345"
+        expect:
+          move: close_ticket
+          confidence: ">=0.90"
+          response_contains: ["Closing", "12345"]
+
+  - name: issue_resolved
+    turns:
+      - input: "issue resolved"
+        expect:
+          move: close_ticket
+          confidence: ">=0.80"
+          response_contains: ["Closing", "resolved"]

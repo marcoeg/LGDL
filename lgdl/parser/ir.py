@@ -1,5 +1,5 @@
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Set
 from .ast import Game, Move
 
 LEVELS = {"low":0.2, "medium":0.5, "high":0.8, "critical":0.95, "adaptive":0.7}
@@ -56,3 +56,47 @@ def compile_move(mv: Move) -> Dict[str, Any]:
         "triggers": trigz,
         "blocks": blocks
     }
+
+def extract_capability_allowlist(compiled_ir: Dict[str, Any]) -> Set[str]:
+    """
+    Extract all capability functions from compiled IR.
+
+    This function traverses the compiled IR and collects all unique capability
+    function names that are called across all moves. This allowlist can be used
+    to configure a PolicyGuard for per-game capability authorization.
+
+    Args:
+        compiled_ir: Compiled game IR (output of compile_game)
+
+    Returns:
+        Set of allowed function names (e.g., {"search_products", "add_item"})
+
+    Example:
+        >>> ir = compile_game(game)
+        >>> allowlist = extract_capability_allowlist(ir)
+        >>> allowlist
+        {'search_products', 'get_price', 'add_item', 'process_payment'}
+    """
+    allowlist = set()
+
+    for move in compiled_ir.get("moves", []):
+        for block in move.get("blocks", []):
+            # Handle regular blocks (when, if_uncertain)
+            if block.get("kind") != "if_chain":
+                for action in block.get("actions", []):
+                    if action.get("type") == "capability":
+                        call = action.get("data", {}).get("call", {})
+                        function = call.get("function")
+                        if function:
+                            allowlist.add(function)
+            else:
+                # Handle if_chain blocks
+                for link in block.get("chain", []):
+                    for action in link.get("actions", []):
+                        if action.get("type") == "capability":
+                            call = action.get("data", {}).get("call", {})
+                            function = call.get("function")
+                            if function:
+                                allowlist.add(function)
+
+    return allowlist

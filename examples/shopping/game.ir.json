@@ -1,0 +1,546 @@
+{
+  "name": "online_shopping",
+  "moves": [
+    {
+      "id": "product_search",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "looking for {category}",
+              "mods": [
+                "fuzzy"
+              ],
+              "regex": "looking for (?P<category>.+)"
+            },
+            {
+              "text": "find me {product}",
+              "mods": [
+                "fuzzy"
+              ],
+              "regex": "find me (?P<product>.+)"
+            },
+            {
+              "text": "search for {product}",
+              "mods": [
+                "strict"
+              ],
+              "regex": "search for (?P<product>.+)"
+            },
+            {
+              "text": "I need {product}",
+              "mods": [],
+              "regex": "I need (?P<product>.+)"
+            },
+            {
+              "text": "show me {category} items",
+              "mods": [],
+              "regex": "show me (?P<category>.+) items"
+            },
+            {
+              "text": "browsing {category}",
+              "mods": [],
+              "regex": "browsing (?P<category>.+)"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "What category are you interested in? Electronics, clothing, or home goods?",
+                    "kind": "clarify"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Great {user.name?there}! I'll search for {category?products} for you."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "product_catalog",
+                  "function": "search_products",
+                  "intent": "search",
+                  "await": false,
+                  "timeout": 3.0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "price_inquiry",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "how much is {product}",
+              "mods": [
+                "strict"
+              ],
+              "regex": "how much is (?P<product>.+)"
+            },
+            {
+              "text": "price for {product}",
+              "mods": [],
+              "regex": "price for (?P<product>.+)"
+            },
+            {
+              "text": "cost of {quantity} {product}",
+              "mods": [],
+              "regex": "cost of (?P<quantity>.+) (?P<product>.+)"
+            },
+            {
+              "text": "what does {product} cost",
+              "mods": [],
+              "regex": "what does (?P<product>.+) cost"
+            },
+            {
+              "text": "{product} price",
+              "mods": [],
+              "regex": "(?P<product>.+) price"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "The {product} costs ${base_price?99}. For {quantity?1} items, that's ${base_price * quantity} total."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "product_catalog",
+                  "function": "get_price",
+                  "intent": "pricing",
+                  "await": false,
+                  "timeout": 2.0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "add_to_cart",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "add {product} to cart",
+              "mods": [
+                "strict"
+              ],
+              "regex": "add (?P<product>.+) to cart"
+            },
+            {
+              "text": "I'll take {quantity} {product}",
+              "mods": [],
+              "regex": "I'll take (?P<quantity>.+) (?P<product>.+)"
+            },
+            {
+              "text": "put {product} in my cart",
+              "mods": [],
+              "regex": "put (?P<product>.+) in my cart"
+            },
+            {
+              "text": "buy {quantity} {product}",
+              "mods": [],
+              "regex": "buy (?P<quantity>.+) (?P<product>.+)"
+            },
+            {
+              "text": "add {product}",
+              "mods": [],
+              "regex": "add (?P<product>.+)"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "How many {product?items} would you like to add?",
+                    "kind": "clarify"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Added {quantity?1} {product} to your cart. Your cart total is now ${cart_total + (item_price * quantity)}."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "cart_system",
+                  "function": "add_item",
+                  "intent": "cart update",
+                  "await": false,
+                  "timeout": 2.0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "apply_discount",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "apply discount code {code}",
+              "mods": [
+                "strict"
+              ],
+              "regex": "apply discount code (?P<code>.+)"
+            },
+            {
+              "text": "use coupon {code}",
+              "mods": [],
+              "regex": "use coupon (?P<code>.+)"
+            },
+            {
+              "text": "I have a promo code {code}",
+              "mods": [],
+              "regex": "I have a promo code (?P<code>.+)"
+            },
+            {
+              "text": "discount code {code}",
+              "mods": [],
+              "regex": "discount code (?P<code>.+)"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Discount applied! Original: ${cart_total?0}, Discount: ${discount_amount?0}, New total: ${cart_total - discount_amount}."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "checkout",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "checkout",
+              "mods": [
+                "strict"
+              ],
+              "regex": "checkout"
+            },
+            {
+              "text": "proceed to checkout",
+              "mods": [],
+              "regex": "proceed to checkout"
+            },
+            {
+              "text": "ready to pay",
+              "mods": [],
+              "regex": "ready to pay"
+            },
+            {
+              "text": "complete my order",
+              "mods": [],
+              "regex": "complete my order"
+            },
+            {
+              "text": "finalize purchase",
+              "mods": [],
+              "regex": "finalize purchase"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Processing checkout for {user.name?valued customer}. Total: ${cart_total?0} using {user.payment.method?credit card}."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "payment_system",
+                  "function": "process_payment",
+                  "intent": "payment",
+                  "await": false,
+                  "timeout": 5.0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "view_cart",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "show my cart",
+              "mods": [
+                "strict"
+              ],
+              "regex": "show my cart"
+            },
+            {
+              "text": "what's in my cart",
+              "mods": [],
+              "regex": "what's in my cart"
+            },
+            {
+              "text": "view cart",
+              "mods": [],
+              "regex": "view cart"
+            },
+            {
+              "text": "my cart",
+              "mods": [],
+              "regex": "my cart"
+            },
+            {
+              "text": "cart summary",
+              "mods": [],
+              "regex": "cart summary"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Your cart contains {cart_items?no items}. Total: ${cart_total?0}."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "compare_prices",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "compare {product1} and {product2}",
+              "mods": [],
+              "regex": "compare (?P<product1>.+) and (?P<product2>.+)"
+            },
+            {
+              "text": "which is cheaper {product1} or {product2}",
+              "mods": [],
+              "regex": "which is cheaper (?P<product1>.+) or (?P<product2>.+)"
+            },
+            {
+              "text": "price difference between {product1} and {product2}",
+              "mods": [],
+              "regex": "price difference between (?P<product1>.+) and (?P<product2>.+)"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "offer_choices",
+                  "data": {
+                    "choices": [
+                      "Show both prices",
+                      "Recommend cheaper option"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "{product1} costs ${price1?100}, {product2} costs ${price2?100}. Difference: ${price1 - price2}."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bulk_order",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "bulk order {quantity} {product}",
+              "mods": [],
+              "regex": "bulk order (?P<quantity>.+) (?P<product>.+)"
+            },
+            {
+              "text": "order {quantity} {product} for business",
+              "mods": [
+                "context-sensitive"
+              ],
+              "regex": "order (?P<quantity>.+) (?P<product>.+) for business"
+            },
+            {
+              "text": "wholesale {quantity} {product}",
+              "mods": [],
+              "regex": "wholesale (?P<quantity>.+) (?P<product>.+)"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "How many units of {product} do you need for your bulk order?",
+                    "kind": "clarify"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Bulk order: {quantity} x {product} = ${unit_price * quantity}. Bulk discount: ${(unit_price * quantity) / 10}. Final: ${(unit_price * quantity) - ((unit_price * quantity) / 10)}."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "capabilities": []
+}

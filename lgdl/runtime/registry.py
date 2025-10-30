@@ -34,7 +34,7 @@ class GameRegistry:
 
     def register(self, game_id: str, path: str, version: str = "0.1"):
         """
-        Load and compile a game.
+        Load and compile a game with per-game capability configuration.
 
         Args:
             game_id: Unique identifier for this game
@@ -45,6 +45,10 @@ class GameRegistry:
             ValueError: If game_id already registered
             FileNotFoundError: If path doesn't exist
             CompileError: If game fails to compile
+
+        Note:
+            Automatically locates capability_contract.json in the same directory
+            as the .lgdl file. If found, enables per-game capabilities.
         """
         if game_id in self.games:
             raise ValueError(f"Game '{game_id}' already registered")
@@ -61,15 +65,27 @@ class GameRegistry:
         game_ast = parse_lgdl(path)
         compiled = compile_game(game_ast)
 
+        # Auto-locate capability_contract.json in same directory
+        contract_path = path_obj.parent / "capability_contract.json"
+        capability_contract_path = None
+        if contract_path.exists():
+            capability_contract_path = str(contract_path.absolute())
+
         self.games[game_id] = {
             "path": str(path_obj.absolute()),
             "version": version,
             "compiled": compiled,
             "name": compiled["name"],
             "file_hash": file_hash,
-            "last_compiled": path_obj.stat().st_mtime
+            "last_compiled": path_obj.stat().st_mtime,
+            "capability_contract_path": capability_contract_path
         }
-        self.runtimes[game_id] = LGDLRuntime(compiled=compiled)
+
+        # Create per-game runtime with auto-extracted allowlist and capability contract
+        self.runtimes[game_id] = LGDLRuntime(
+            compiled=compiled,
+            capability_contract_path=capability_contract_path
+        )
 
     def get_runtime(self, game_id: str) -> LGDLRuntime:
         """

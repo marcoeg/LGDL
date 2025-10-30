@@ -1,0 +1,60 @@
+{
+  "service": "shopping",
+  "version": "1.0",
+  "capabilities": {
+    "product_catalog": {
+      "functions": {
+        "search_products": {
+          "description": "Search product catalog",
+          "parameters": ["category", "query"],
+          "returns": "list of products",
+          "timeout_ms": 3000
+        },
+        "get_price": {
+          "description": "Get product price",
+          "parameters": ["product_id"],
+          "returns": "price information",
+          "timeout_ms": 2000
+        },
+        "check_inventory": {
+          "description": "Check product availability",
+          "parameters": ["product_id", "quantity"],
+          "returns": "availability status",
+          "timeout_ms": 2000
+        }
+      }
+    },
+    "cart_system": {
+      "functions": {
+        "add_item": {
+          "description": "Add item to shopping cart",
+          "parameters": ["product_id", "quantity"],
+          "returns": "updated cart",
+          "timeout_ms": 2000
+        },
+        "remove_item": {
+          "description": "Remove item from cart",
+          "parameters": ["product_id"],
+          "returns": "updated cart",
+          "timeout_ms": 2000
+        },
+        "calculate_total": {
+          "description": "Calculate cart total with tax",
+          "parameters": [],
+          "returns": "total amount",
+          "timeout_ms": 1000
+        }
+      }
+    },
+    "payment_system": {
+      "functions": {
+        "process_payment": {
+          "description": "Process payment transaction",
+          "parameters": ["amount", "payment_method"],
+          "returns": "transaction result",
+          "timeout_ms": 5000
+        }
+      }
+    }
+  }
+}

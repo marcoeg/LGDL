@@ -1,0 +1,872 @@
+{
+  "name": "restaurant_booking",
+  "moves": [
+    {
+      "id": "reservation",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "book table for {party_size}",
+              "mods": [
+                "fuzzy"
+              ],
+              "regex": "book table for (?P<party_size>.+)"
+            },
+            {
+              "text": "reservation for {party_size} at {time}",
+              "mods": [
+                "fuzzy"
+              ],
+              "regex": "reservation for (?P<party_size>.+) at (?P<time>.+)"
+            },
+            {
+              "text": "table for {party_size} on {date}",
+              "mods": [],
+              "regex": "table for (?P<party_size>.+) on (?P<date>.+)"
+            },
+            {
+              "text": "reserve {party_size} seats",
+              "mods": [],
+              "regex": "reserve (?P<party_size>.+) seats"
+            },
+            {
+              "text": "I need a table for {party_size} people",
+              "mods": [],
+              "regex": "I need a table for (?P<party_size>.+) people"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "When would you like to dine? Please provide date and time.",
+                    "kind": "clarify"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Booking table for {party_size} on {date?today} at {time?7pm}. We'll prepare ${party_size * 2} seats for you."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "reservation_system",
+                  "function": "check_availability",
+                  "intent": "availability check",
+                  "await": false,
+                  "timeout": 3.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "successful"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Reservation confirmed! Table for {party_size} at {time} on {date}. Confirmation: {confirmation_code?REF123}."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "reservation_system",
+                  "function": "create_reservation",
+                  "intent": "create booking",
+                  "await": false,
+                  "timeout": 4.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "failed"
+          },
+          "actions": [
+            {
+              "type": "offer_choices",
+              "data": {
+                "choices": [
+                  "Try different time",
+                  "Join waitlist",
+                  "Cancel"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "menu_inquiry",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "what's on the menu",
+              "mods": [
+                "fuzzy"
+              ],
+              "regex": "what's on the menu"
+            },
+            {
+              "text": "do you have {dish}",
+              "mods": [
+                "context-sensitive"
+              ],
+              "regex": "do you have (?P<dish>.+)"
+            },
+            {
+              "text": "menu for {meal_type}",
+              "mods": [],
+              "regex": "menu for (?P<meal_type>.+)"
+            },
+            {
+              "text": "show me {cuisine} dishes",
+              "mods": [],
+              "regex": "show me (?P<cuisine>.+) dishes"
+            },
+            {
+              "text": "what do you serve",
+              "mods": [],
+              "regex": "what do you serve"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Our {meal_type?dinner} menu features {dish.name?various dishes}. Price: {dish.price?market price}."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "menu_service",
+                  "function": "get_menu",
+                  "intent": "menu query",
+                  "await": false,
+                  "timeout": 2.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "successful"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Here's our menu. {dish.name} is available for {dish.price?market price}."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "special_request",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "allergic to {ingredient}",
+              "mods": [
+                "learned"
+              ],
+              "regex": "allergic to (?P<ingredient>.+)"
+            },
+            {
+              "text": "no {ingredient}",
+              "mods": [
+                "fuzzy"
+              ],
+              "regex": "no (?P<ingredient>.+)"
+            },
+            {
+              "text": "vegetarian options",
+              "mods": [],
+              "regex": "vegetarian options"
+            },
+            {
+              "text": "vegan menu",
+              "mods": [],
+              "regex": "vegan menu"
+            },
+            {
+              "text": "gluten free {dish}",
+              "mods": [],
+              "regex": "gluten free (?P<dish>.+)"
+            },
+            {
+              "text": "dietary restriction {restriction}",
+              "mods": [],
+              "regex": "dietary restriction (?P<restriction>.+)"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "Which dietary restriction should I note for your reservation?",
+                    "kind": "clarify"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Noted: {restriction?dietary restriction} for {user.name?your party}. We'll ensure no {ingredient?allergens} in your meal."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "menu_service",
+                  "function": "get_allergen_info",
+                  "intent": "allergen check",
+                  "await": false,
+                  "timeout": 3.0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cancel_reservation",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "cancel my reservation",
+              "mods": [
+                "strict"
+              ],
+              "regex": "cancel my reservation"
+            },
+            {
+              "text": "cancel booking for {date}",
+              "mods": [
+                "strict"
+              ],
+              "regex": "cancel booking for (?P<date>.+)"
+            },
+            {
+              "text": "cancel table {confirmation_code}",
+              "mods": [],
+              "regex": "cancel table (?P<confirmation_code>.+)"
+            },
+            {
+              "text": "I need to cancel",
+              "mods": [],
+              "regex": "I need to cancel"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Canceling reservation {confirmation_code?} for {date?}. Are you sure?"
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "reservation_system",
+                  "function": "cancel_reservation",
+                  "intent": "cancellation",
+                  "await": false,
+                  "timeout": 2.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "successful"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Reservation {confirmation_code} canceled successfully."
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "failed"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Couldn't find reservation {confirmation_code?}. Please check your confirmation number."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "modify_reservation",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "change my reservation to {time}",
+              "mods": [],
+              "regex": "change my reservation to (?P<time>.+)"
+            },
+            {
+              "text": "move booking to {date}",
+              "mods": [],
+              "regex": "move booking to (?P<date>.+)"
+            },
+            {
+              "text": "update party size to {party_size}",
+              "mods": [],
+              "regex": "update party size to (?P<party_size>.+)"
+            },
+            {
+              "text": "reschedule for {time} on {date}",
+              "mods": [],
+              "regex": "reschedule for (?P<time>.+) on (?P<date>.+)"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "What would you like to change? Date, time, or party size?",
+                    "kind": "clarify"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Updating reservation {confirmation_code?} to {party_size?original size} people on {date?original date} at {time?original time}."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "reservation_system",
+                  "function": "modify_reservation",
+                  "intent": "modification",
+                  "await": false,
+                  "timeout": 3.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "successful"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Reservation updated! New time: {time}, New party size: {party_size}. Chairs needed: ${party_size * 2}."
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "failed"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Unable to modify reservation. {time?That time} may not be available."
+              }
+            },
+            {
+              "type": "offer_choices",
+              "data": {
+                "choices": [
+                  "Try different time",
+                  "Cancel and rebook",
+                  "Keep original"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "special_occasion",
+      "threshold": 0.2,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "celebrating {occasion}",
+              "mods": [],
+              "regex": "celebrating (?P<occasion>.+)"
+            },
+            {
+              "text": "it's a {occasion}",
+              "mods": [],
+              "regex": "it's a (?P<occasion>.+)"
+            },
+            {
+              "text": "{occasion} dinner",
+              "mods": [],
+              "regex": "(?P<occasion>.+) dinner"
+            },
+            {
+              "text": "special occasion",
+              "mods": [],
+              "regex": "special occasion"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "What's the occasion? Birthday, anniversary, or other celebration?",
+                    "kind": "clarify"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Wonderful! We'll make your {occasion?special occasion} memorable. Would you like a special dessert or champagne?"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "table_preference",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "I want {location} seating",
+              "mods": [
+                "context-sensitive"
+              ],
+              "regex": "I want (?P<location>.+) seating"
+            },
+            {
+              "text": "prefer {location} table",
+              "mods": [],
+              "regex": "prefer (?P<location>.+) table"
+            },
+            {
+              "text": "window seat",
+              "mods": [],
+              "regex": "window seat"
+            },
+            {
+              "text": "outdoor table",
+              "mods": [],
+              "regex": "outdoor table"
+            },
+            {
+              "text": "booth",
+              "mods": [],
+              "regex": "booth"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Requesting {location?preferred} seating for your party of {party_size?2}. Subject to availability."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "seating",
+                  "function": "assign_table",
+                  "intent": "table assignment",
+                  "await": false,
+                  "timeout": 2.0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "group_booking",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "large group of {party_size}",
+              "mods": [],
+              "regex": "large group of (?P<party_size>.+)"
+            },
+            {
+              "text": "party of {party_size} people",
+              "mods": [
+                "context-sensitive"
+              ],
+              "regex": "party of (?P<party_size>.+) people"
+            },
+            {
+              "text": "group reservation {party_size}",
+              "mods": [],
+              "regex": "group reservation (?P<party_size>.+)"
+            },
+            {
+              "text": "book for {party_size} guests",
+              "mods": [],
+              "regex": "book for (?P<party_size>.+) guests"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "cmp": ">",
+                "lhs": {
+                  "ref": "party_size"
+                },
+                "rhs": 8.0
+              },
+              "actions": [
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "For large groups ({party_size}), we recommend our private dining room. Capacity: ${party_size + 4} with extra seating."
+                  }
+                },
+                {
+                  "type": "noop",
+                  "data": {}
+                },
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "Booking for {party_size} guests. Total seats: ${party_size * 2}."
+                  }
+                },
+                {
+                  "type": "capability",
+                  "data": {
+                    "call": {
+                      "service": "reservation_system",
+                      "function": "create_reservation",
+                      "intent": "group booking",
+                      "await": false,
+                      "timeout": 4.0
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wait_time_inquiry",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "how long is the wait",
+              "mods": [],
+              "regex": "how long is the wait"
+            },
+            {
+              "text": "wait time for {party_size}",
+              "mods": [],
+              "regex": "wait time for (?P<party_size>.+)"
+            },
+            {
+              "text": "current wait",
+              "mods": [],
+              "regex": "current wait"
+            },
+            {
+              "text": "how busy are you",
+              "mods": [],
+              "regex": "how busy are you"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Current wait for {party_size?2} is {wait_time?15} minutes. Table will be ready around ${current_time + wait_time} minutes from now."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hours_inquiry",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "what are your hours",
+              "mods": [
+                "strict"
+              ],
+              "regex": "what are your hours"
+            },
+            {
+              "text": "when do you open",
+              "mods": [],
+              "regex": "when do you open"
+            },
+            {
+              "text": "when do you close",
+              "mods": [],
+              "regex": "when do you close"
+            },
+            {
+              "text": "are you open on {day}",
+              "mods": [],
+              "regex": "are you open on (?P<day>.+)"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "We're open {hours?11am-10pm} {day?daily}. Kitchen closes 30 minutes before closing."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "price_range_inquiry",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "how expensive",
+              "mods": [],
+              "regex": "how expensive"
+            },
+            {
+              "text": "price range",
+              "mods": [],
+              "regex": "price range"
+            },
+            {
+              "text": "what's the cost",
+              "mods": [],
+              "regex": "what's the cost"
+            },
+            {
+              "text": "average price per person",
+              "mods": [],
+              "regex": "average price per person"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Average price per person: ${avg_price?45}. For {party_size?2} people, expect around ${avg_price * party_size}."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "capabilities": []
+}

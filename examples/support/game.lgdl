@@ -1,0 +1,227 @@
+game customer_support {
+  description: "Multi-tier customer support with intelligent escalation and conditional workflows."
+
+  capabilities {
+    ticketing: ["create_ticket", "update_ticket", "close_ticket"]
+    auth_system: ["reset_password", "verify_account"]
+    billing: ["check_account", "process_refund"]
+    knowledge_base: ["search_faq"]
+  }
+
+  moves {
+    move issue_report {
+      when user says something like: [
+        "I have a problem" (fuzzy),
+        "I need help with {issue}",
+        "something is wrong",
+        "issue with {component}",
+        "not working"
+      ]
+      confidence: low
+
+      if uncertain {
+        offer choices: ["Technical issue", "Billing question", "General help"]
+      }
+
+      when confident {
+        respond with: "I understand you're having an issue{issue? with issue}. Let me help you with that."
+        ticketing.create_ticket for "ticket creation" timeout 3
+      }
+    }
+
+    move technical_issue {
+      when user says something like: [
+        "technical problem with {component}" (strict),
+        "{component} is broken",
+        "{component} not responding",
+        "error in {component}",
+        "bug in {component}"
+      ]
+      confidence: medium
+
+      if severity = "critical" {
+        escalate to: engineering
+        respond with: "This is a critical {component} issue. Escalating to engineering team immediately."
+      }
+
+      if severity = "high" {
+        respond with: "High priority {component} issue detected. Creating urgent ticket."
+        ticketing.create_ticket for "urgent ticket" timeout 2
+      }
+
+      if severity = "medium" {
+        respond with: "I'll create a ticket for your {component} issue. Expect a response within 24 hours."
+        ticketing.create_ticket for "standard ticket" timeout 3
+      } else {
+        respond with: "Let me look into this {component?system} issue for you."
+        knowledge_base.search_faq for "faq search" timeout 2
+      }
+    }
+
+    move billing_question {
+      when user says something like: [
+        "billing question" (strict),
+        "charge on my account",
+        "refund for {item}",
+        "invoice for {date}",
+        "payment issue"
+      ]
+      confidence: medium
+
+      when confident {
+        respond with: "Let me check your account for {item?recent charges}."
+        billing.check_account for "account lookup" timeout 3
+      }
+
+      when successful {
+        respond with: "I found your account. {account_status?Everything looks good}."
+      }
+
+      when failed {
+        escalate to: billing_team
+        respond with: "I couldn't access your account. Escalating to our billing specialist."
+      }
+    }
+
+    move reset_password {
+      when user says something like: [
+        "reset password" (strict),
+        "forgot password" (strict),
+        "can't log in",
+        "password reset",
+        "lost my password"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "I'll help you reset your password for {account_email?your account}."
+        auth_system.reset_password for "password reset" timeout 5
+      }
+
+      when successful {
+        respond with: "Password reset email sent to {account_email}. Check your inbox."
+      }
+
+      when failed {
+        respond with: "Unable to process password reset. Please verify your email: {account_email?not provided}."
+      }
+    }
+
+    move general_help {
+      when user says something like: [
+        "help" (fuzzy),
+        "I'm confused",
+        "don't know what to do",
+        "need assistance",
+        "can you help"
+      ]
+      confidence: low
+
+      if uncertain {
+        offer choices: ["Account issues", "Technical problems", "Billing", "General info"]
+      }
+
+      when confident {
+        respond with: "I'm here to help! I can assist with account issues, technical problems, or billing questions."
+        knowledge_base.search_faq for "general help" timeout 2
+      }
+    }
+
+    move escalate_request {
+      when user says something like: [
+        "speak to a human" (strict),
+        "talk to supervisor",
+        "escalate this",
+        "I want a manager",
+        "this isn't working"
+      ]
+      confidence: high
+
+      when confident {
+        escalate to: human_agent
+        respond with: "I understand {user.name?}. Escalating you to a human agent now. Estimated wait: {wait_time?5} minutes."
+      }
+    }
+
+    move account_verification {
+      when user says something like: [
+        "verify my account" (strict),
+        "account verification",
+        "confirm my identity",
+        "need to verify"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "I'll verify your account {account_id?}. Please confirm your email: {account_email?}."
+        auth_system.verify_account for "verification" timeout 4
+      }
+
+      when successful {
+        respond with: "Account verified successfully for {account_email}!"
+      }
+
+      when failed {
+        respond with: "Verification failed. Please contact support at {support_email?support@example.com}."
+      }
+    }
+
+    move refund_request {
+      when user says something like: [
+        "I want a refund for {item}" (strict),
+        "refund {item}",
+        "return {item}",
+        "cancel order {order_id}"
+      ]
+      confidence: medium
+
+      if uncertain {
+        ask for clarification: "Which item would you like a refund for? Please provide the order number."
+      }
+
+      when confident {
+        respond with: "Processing refund for {item}. Amount: ${refund_amount?0}. Refund will appear in 3-5 business days."
+        billing.process_refund for "refund" timeout 5
+      }
+
+      when successful {
+        respond with: "Refund processed! ${refund_amount} will be returned to {user.payment.method?your payment method}."
+      }
+
+      when failed {
+        escalate to: billing_team
+        respond with: "Unable to process refund automatically. Escalating to billing team."
+      }
+    }
+
+    move check_status {
+      when user says something like: [
+        "status of ticket {ticket_id}" (strict),
+        "what's the status of {ticket_id}",
+        "ticket {ticket_id} update",
+        "check my ticket"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "Ticket {ticket_id} status: {ticket_status?pending}. Last updated: {last_update?today}."
+        ticketing.update_ticket for "status check" timeout 2
+      }
+    }
+
+    move close_ticket {
+      when user says something like: [
+        "close ticket {ticket_id}" (strict),
+        "resolve ticket {ticket_id}",
+        "issue resolved",
+        "problem fixed"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "Closing ticket {ticket_id?your ticket}. Thank you for confirming the issue is resolved!"
+        ticketing.close_ticket for "close ticket" timeout 2
+      }
+    }
+  }
+}

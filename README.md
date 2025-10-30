@@ -224,8 +224,23 @@ uv run pytest tests/test_registry.py -v
 # End-to-end: starts API, runs goldens, shuts down
 uv run bash scripts/run_goldens.sh
 
-# Manual (requires API running)
-uv run python scripts/goldens.py --api http://127.0.0.1:8000/move -v
+# Manual - Test individual games (requires API running)
+# Medical game (✅ 4/4 passing)
+uv run python scripts/goldens.py \
+  --api http://127.0.0.1:8000/games/medical/move \
+  --file examples/medical/golden_dialogs.yaml -v
+
+# Greeting game (✅ 5/5 passing)
+uv run python scripts/goldens.py \
+  --api http://127.0.0.1:8000/games/greeting/move \
+  --file examples/greeting/golden_dialogs.yaml -v
+
+# Test all working games
+for game in medical greeting; do
+  uv run python scripts/goldens.py \
+    --api http://127.0.0.1:8000/games/$game/move \
+    --file examples/$game/golden_dialogs.yaml
+done
 ```
 
 ### Test Coverage by Feature
@@ -503,6 +518,93 @@ See [docs/MIGRATION_MVP_TO_V1.md](docs/MIGRATION_MVP_TO_V1.md) for full details.
 - Full negotiation support
 
 See [docs/P0_P1_CRITICAL_FIXES.md](docs/P0_P1_CRITICAL_FIXES.md) for implementation details.
+
+---
+
+## Examples
+
+LGDL includes 5 example games showcasing different features:
+
+### 1. Medical Scheduling (`examples/medical/`)
+**Features**: Basic appointment booking with negotiation
+- Moves: appointment_request, general_inquiry, book_intent
+- Demonstrates: Uncertainty handling, capability calls, parameter extraction
+- Golden tests: 4 scenarios
+
+### 2. Greeting (`examples/greeting/`)
+**Features**: Simple conversational interactions
+- Moves: greeting, farewell, small_talk
+- Demonstrates: Pattern matching, confidence levels, offer choices
+- Golden tests: 5 scenarios
+
+### 3. Online Shopping (`examples/shopping/`)
+**Features**: E-commerce with price calculations
+- Moves: product_search, price_inquiry, add_to_cart, apply_discount, checkout, compare_prices, bulk_order
+- Demonstrates: Template arithmetic (`${price * quantity}`), nested context (`{user.cart.total}`), fallbacks (`{var?default}`)
+- Golden tests: 12 scenarios
+- Highlights:
+  - Price calculations with discount arithmetic
+  - Bulk order pricing with dynamic discounts
+  - Cart total tracking across conversations
+
+### 4. Customer Support (`examples/support/`)
+**Features**: Multi-tier support with escalation
+- Moves: issue_report, technical_issue, billing_question, reset_password, escalate_request, refund_request
+- Demonstrates: Escalation flows, if/else chains, successful/failed conditions, strict pattern matching
+- Golden tests: 18 scenarios
+- Highlights:
+  - Conditional escalation based on severity
+  - Password reset with success/failure handling
+  - Refund processing with fallback to human agent
+
+### 5. Restaurant Booking (`examples/restaurant/`)
+**Features**: Reservation system with dietary accommodations
+- Moves: reservation, menu_inquiry, special_request, cancel_reservation, modify_reservation, group_booking
+- Demonstrates: Fuzzy matching, context-sensitive patterns, learned patterns, time arithmetic
+- Golden tests: 25 scenarios
+- Highlights:
+  - Table capacity calculation (`${party_size * 2}` seats)
+  - Special dietary restrictions with allergen tracking
+  - Large group handling with automatic private room escalation
+
+### Running Examples
+
+**Start server with all games**:
+```bash
+uv run lgdl serve --games \
+  medical:examples/medical/game.lgdl,\
+  greeting:examples/greeting/game.lgdl,\
+  shopping:examples/shopping/game.lgdl,\
+  support:examples/support/game.lgdl,\
+  restaurant:examples/restaurant/game.lgdl
+```
+
+**Interactive chat** (requires running server):
+```bash
+# Chat with shopping assistant
+uv run python scripts/chat.py --game shopping --api http://localhost:8000
+
+# Chat with support bot
+uv run python scripts/chat.py --game support --api http://localhost:8000
+
+# Export conversation to JSON
+uv run python scripts/chat.py --game restaurant --export my_convo.json
+```
+
+**Test with golden dialogs**:
+```bash
+# Test shopping game
+uv run python scripts/goldens.py \
+  --api http://localhost:8000/games/shopping/move \
+  --file examples/shopping/golden_dialogs.yaml -v
+
+# Test all examples
+for game in shopping support restaurant; do
+  uv run python scripts/goldens.py \
+    --api http://localhost:8000/games/$game/move \
+    --file examples/$game/golden_dialogs.yaml
+done
+```
 
 ---
 

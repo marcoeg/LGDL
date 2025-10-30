@@ -1,0 +1,202 @@
+game: restaurant_booking
+version: 0.1
+dialogs:
+  - name: reservation_complete
+    turns:
+      - input: "book table for 4 at 7pm"
+        expect:
+          move: reservation
+          confidence: ">=0.75"
+          response_contains: ["Booking", "4", "7pm"]
+
+  - name: reservation_negotiate_time
+    turns:
+      - input: "book table for 2"
+        expect:
+          move: reservation
+          confidence: "<=0.70"
+          response_contains: ["When", "date", "time"]
+
+  - name: reservation_with_date
+    turns:
+      - input: "table for 6 on Friday"
+        expect:
+          move: reservation
+          confidence: ">=0.70"
+          response_contains: ["6", "Friday"]
+
+  - name: menu_inquiry_fuzzy
+    turns:
+      - input: "what's on the menu"
+        expect:
+          move: menu_inquiry
+          confidence: ">=0.65"
+          response_contains: ["menu"]
+
+  - name: menu_specific_dish
+    turns:
+      - input: "do you have pasta"
+        expect:
+          move: menu_inquiry
+          confidence: ">=0.70"
+          response_contains: ["pasta"]
+
+  - name: special_request_allergy
+    turns:
+      - input: "allergic to peanuts"
+        expect:
+          move: special_request
+          confidence: ">=0.70"
+          response_contains: ["Noted", "peanuts"]
+
+  - name: special_request_vegetarian
+    turns:
+      - input: "vegetarian options"
+        expect:
+          move: special_request
+          confidence: ">=0.75"
+          response_contains: ["vegetarian"]
+
+  - name: special_request_negotiation
+    turns:
+      - input: "I have dietary restrictions"
+        expect:
+          move: special_request
+          confidence: "<=0.65"
+          response_contains: ["Which", "restriction"]
+
+  - name: cancel_reservation_strict
+    turns:
+      - input: "cancel my reservation"
+        expect:
+          move: cancel_reservation
+          confidence: ">=0.90"
+          response_contains: ["Canceling", "reservation"]
+
+  - name: cancel_with_date
+    turns:
+      - input: "cancel booking for Friday"
+        expect:
+          move: cancel_reservation
+          confidence: ">=0.85"
+          response_contains: ["Canceling", "Friday"]
+
+  - name: modify_reservation_time
+    turns:
+      - input: "change my reservation to 8pm"
+        expect:
+          move: modify_reservation
+          confidence: ">=0.75"
+          response_contains: ["Updating", "8pm"]
+
+  - name: modify_party_size
+    turns:
+      - input: "update party size to 8"
+        expect:
+          move: modify_reservation
+          confidence: ">=0.75"
+          response_contains: ["Updating", "8"]
+
+  - name: modify_negotiation
+    turns:
+      - input: "I need to change my reservation"
+        expect:
+          move: modify_reservation
+          confidence: "<=0.65"
+          response_contains: ["What", "change"]
+
+  - name: special_occasion_birthday
+    turns:
+      - input: "celebrating birthday"
+        expect:
+          move: special_occasion
+          confidence: ">=0.60"
+          response_contains: ["birthday", "special"]
+
+  - name: special_occasion_negotiation
+    turns:
+      - input: "it's a special occasion"
+        expect:
+          move: special_occasion
+          confidence: "<=0.55"
+          response_contains: ["occasion", "Birthday", "anniversary"]
+
+  - name: table_preference_window
+    turns:
+      - input: "I want window seating"
+        expect:
+          move: table_preference
+          confidence: ">=0.75"
+          response_contains: ["window", "seating"]
+
+  - name: table_preference_outdoor
+    turns:
+      - input: "outdoor table"
+        expect:
+          move: table_preference
+          confidence: ">=0.80"
+          response_contains: ["outdoor"]
+
+  - name: group_booking_large
+    turns:
+      - input: "large group of 12"
+        expect:
+          move: group_booking
+          confidence: ">=0.75"
+          response_contains: ["12", "group"]
+
+  - name: group_booking_normal
+    turns:
+      - input: "party of 6 people"
+        expect:
+          move: group_booking
+          confidence: ">=0.70"
+          response_contains: ["6", "guests"]
+
+  - name: wait_time_inquiry
+    turns:
+      - input: "how long is the wait"
+        expect:
+          move: wait_time_inquiry
+          confidence: ">=0.85"
+          response_contains: ["wait", "minutes"]
+
+  - name: wait_time_for_party
+    turns:
+      - input: "wait time for 4"
+        expect:
+          move: wait_time_inquiry
+          confidence: ">=0.80"
+          response_contains: ["wait", "4"]
+
+  - name: hours_inquiry_strict
+    turns:
+      - input: "what are your hours"
+        expect:
+          move: hours_inquiry
+          confidence: ">=0.90"
+          response_contains: ["open"]
+
+  - name: hours_specific_day
+    turns:
+      - input: "are you open on Sunday"
+        expect:
+          move: hours_inquiry
+          confidence: ">=0.85"
+          response_contains: ["Sunday"]
+
+  - name: price_range_inquiry
+    turns:
+      - input: "how expensive"
+        expect:
+          move: price_range_inquiry
+          confidence: ">=0.70"
+          response_contains: ["price", "person"]
+
+  - name: price_per_person
+    turns:
+      - input: "average price per person"
+        expect:
+          move: price_range_inquiry
+          confidence: ">=0.85"
+          response_contains: ["price", "person"]

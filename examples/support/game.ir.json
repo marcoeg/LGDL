@@ -1,0 +1,910 @@
+{
+  "name": "customer_support",
+  "moves": [
+    {
+      "id": "issue_report",
+      "threshold": 0.2,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "I have a problem",
+              "mods": [
+                "fuzzy"
+              ],
+              "regex": "I have a problem"
+            },
+            {
+              "text": "I need help with {issue}",
+              "mods": [],
+              "regex": "I need help with (?P<issue>.+)"
+            },
+            {
+              "text": "something is wrong",
+              "mods": [],
+              "regex": "something is wrong"
+            },
+            {
+              "text": "issue with {component}",
+              "mods": [],
+              "regex": "issue with (?P<component>.+)"
+            },
+            {
+              "text": "not working",
+              "mods": [],
+              "regex": "not working"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "offer_choices",
+                  "data": {
+                    "choices": [
+                      "Technical issue",
+                      "Billing question",
+                      "General help"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "I understand you're having an issue{issue? with issue}. Let me help you with that."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "ticketing",
+                  "function": "create_ticket",
+                  "intent": "ticket creation",
+                  "await": false,
+                  "timeout": 3.0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "technical_issue",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "technical problem with {component}",
+              "mods": [
+                "strict"
+              ],
+              "regex": "technical problem with (?P<component>.+)"
+            },
+            {
+              "text": "{component} is broken",
+              "mods": [],
+              "regex": "(?P<component>.+) is broken"
+            },
+            {
+              "text": "{component} not responding",
+              "mods": [],
+              "regex": "(?P<component>.+) not responding"
+            },
+            {
+              "text": "error in {component}",
+              "mods": [],
+              "regex": "error in (?P<component>.+)"
+            },
+            {
+              "text": "bug in {component}",
+              "mods": [],
+              "regex": "bug in (?P<component>.+)"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "cmp": "=",
+                "lhs": {
+                  "ref": "severity"
+                },
+                "rhs": "critical"
+              },
+              "actions": [
+                {
+                  "type": "noop",
+                  "data": {}
+                },
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "This is a critical {component} issue. Escalating to engineering team immediately."
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "cmp": "=",
+                "lhs": {
+                  "ref": "severity"
+                },
+                "rhs": "high"
+              },
+              "actions": [
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "High priority {component} issue detected. Creating urgent ticket."
+                  }
+                },
+                {
+                  "type": "capability",
+                  "data": {
+                    "call": {
+                      "service": "ticketing",
+                      "function": "create_ticket",
+                      "intent": "urgent ticket",
+                      "await": false,
+                      "timeout": 2.0
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "cmp": "=",
+                "lhs": {
+                  "ref": "severity"
+                },
+                "rhs": "medium"
+              },
+              "actions": [
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "I'll create a ticket for your {component} issue. Expect a response within 24 hours."
+                  }
+                },
+                {
+                  "type": "capability",
+                  "data": {
+                    "call": {
+                      "service": "ticketing",
+                      "function": "create_ticket",
+                      "intent": "standard ticket",
+                      "await": false,
+                      "timeout": 3.0
+                    }
+                  }
+                },
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "Let me look into this {component?system} issue for you."
+                  }
+                },
+                {
+                  "type": "capability",
+                  "data": {
+                    "call": {
+                      "service": "knowledge_base",
+                      "function": "search_faq",
+                      "intent": "faq search",
+                      "await": false,
+                      "timeout": 2.0
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "billing_question",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "billing question",
+              "mods": [
+                "strict"
+              ],
+              "regex": "billing question"
+            },
+            {
+              "text": "charge on my account",
+              "mods": [],
+              "regex": "charge on my account"
+            },
+            {
+              "text": "refund for {item}",
+              "mods": [],
+              "regex": "refund for (?P<item>.+)"
+            },
+            {
+              "text": "invoice for {date}",
+              "mods": [],
+              "regex": "invoice for (?P<date>.+)"
+            },
+            {
+              "text": "payment issue",
+              "mods": [],
+              "regex": "payment issue"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Let me check your account for {item?recent charges}."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "billing",
+                  "function": "check_account",
+                  "intent": "account lookup",
+                  "await": false,
+                  "timeout": 3.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "successful"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "I found your account. {account_status?Everything looks good}."
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "failed"
+          },
+          "actions": [
+            {
+              "type": "noop",
+              "data": {}
+            },
+            {
+              "type": "respond",
+              "data": {
+                "text": "I couldn't access your account. Escalating to our billing specialist."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "reset_password",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "reset password",
+              "mods": [
+                "strict"
+              ],
+              "regex": "reset password"
+            },
+            {
+              "text": "forgot password",
+              "mods": [
+                "strict"
+              ],
+              "regex": "forgot password"
+            },
+            {
+              "text": "can't log in",
+              "mods": [],
+              "regex": "can't log in"
+            },
+            {
+              "text": "password reset",
+              "mods": [],
+              "regex": "password reset"
+            },
+            {
+              "text": "lost my password",
+              "mods": [],
+              "regex": "lost my password"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "I'll help you reset your password for {account_email?your account}."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "auth_system",
+                  "function": "reset_password",
+                  "intent": "password reset",
+                  "await": false,
+                  "timeout": 5.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "successful"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Password reset email sent to {account_email}. Check your inbox."
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "failed"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Unable to process password reset. Please verify your email: {account_email?not provided}."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "general_help",
+      "threshold": 0.2,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "help",
+              "mods": [
+                "fuzzy"
+              ],
+              "regex": "help"
+            },
+            {
+              "text": "I'm confused",
+              "mods": [],
+              "regex": "I'm confused"
+            },
+            {
+              "text": "don't know what to do",
+              "mods": [],
+              "regex": "don't know what to do"
+            },
+            {
+              "text": "need assistance",
+              "mods": [],
+              "regex": "need assistance"
+            },
+            {
+              "text": "can you help",
+              "mods": [],
+              "regex": "can you help"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "offer_choices",
+                  "data": {
+                    "choices": [
+                      "Account issues",
+                      "Technical problems",
+                      "Billing",
+                      "General info"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "I'm here to help! I can assist with account issues, technical problems, or billing questions."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "knowledge_base",
+                  "function": "search_faq",
+                  "intent": "general help",
+                  "await": false,
+                  "timeout": 2.0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "escalate_request",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "speak to a human",
+              "mods": [
+                "strict"
+              ],
+              "regex": "speak to a human"
+            },
+            {
+              "text": "talk to supervisor",
+              "mods": [],
+              "regex": "talk to supervisor"
+            },
+            {
+              "text": "escalate this",
+              "mods": [],
+              "regex": "escalate this"
+            },
+            {
+              "text": "I want a manager",
+              "mods": [],
+              "regex": "I want a manager"
+            },
+            {
+              "text": "this isn't working",
+              "mods": [],
+              "regex": "this isn't working"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "noop",
+              "data": {}
+            },
+            {
+              "type": "respond",
+              "data": {
+                "text": "I understand {user.name?}. Escalating you to a human agent now. Estimated wait: {wait_time?5} minutes."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "account_verification",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "verify my account",
+              "mods": [
+                "strict"
+              ],
+              "regex": "verify my account"
+            },
+            {
+              "text": "account verification",
+              "mods": [],
+              "regex": "account verification"
+            },
+            {
+              "text": "confirm my identity",
+              "mods": [],
+              "regex": "confirm my identity"
+            },
+            {
+              "text": "need to verify",
+              "mods": [],
+              "regex": "need to verify"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "I'll verify your account {account_id?}. Please confirm your email: {account_email?}."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "auth_system",
+                  "function": "verify_account",
+                  "intent": "verification",
+                  "await": false,
+                  "timeout": 4.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "successful"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Account verified successfully for {account_email}!"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "failed"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Verification failed. Please contact support at {support_email?support@example.com}."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "refund_request",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "I want a refund for {item}",
+              "mods": [
+                "strict"
+              ],
+              "regex": "I want a refund for (?P<item>.+)"
+            },
+            {
+              "text": "refund {item}",
+              "mods": [],
+              "regex": "refund (?P<item>.+)"
+            },
+            {
+              "text": "return {item}",
+              "mods": [],
+              "regex": "return (?P<item>.+)"
+            },
+            {
+              "text": "cancel order {order_id}",
+              "mods": [],
+              "regex": "cancel order (?P<order_id>.+)"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "if_chain",
+          "chain": [
+            {
+              "condition": {
+                "special": "uncertain"
+              },
+              "actions": [
+                {
+                  "type": "respond",
+                  "data": {
+                    "text": "Which item would you like a refund for? Please provide the order number.",
+                    "kind": "clarify"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Processing refund for {item}. Amount: ${refund_amount?0}. Refund will appear in 3-5 business days."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "billing",
+                  "function": "process_refund",
+                  "intent": "refund",
+                  "await": false,
+                  "timeout": 5.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "successful"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Refund processed! ${refund_amount} will be returned to {user.payment.method?your payment method}."
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "failed"
+          },
+          "actions": [
+            {
+              "type": "noop",
+              "data": {}
+            },
+            {
+              "type": "respond",
+              "data": {
+                "text": "Unable to process refund automatically. Escalating to billing team."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "check_status",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "status of ticket {ticket_id}",
+              "mods": [
+                "strict"
+              ],
+              "regex": "status of ticket (?P<ticket_id>.+)"
+            },
+            {
+              "text": "what's the status of {ticket_id}",
+              "mods": [],
+              "regex": "what's the status of (?P<ticket_id>.+)"
+            },
+            {
+              "text": "ticket {ticket_id} update",
+              "mods": [],
+              "regex": "ticket (?P<ticket_id>.+) update"
+            },
+            {
+              "text": "check my ticket",
+              "mods": [],
+              "regex": "check my ticket"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Ticket {ticket_id} status: {ticket_status?pending}. Last updated: {last_update?today}."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "ticketing",
+                  "function": "update_ticket",
+                  "intent": "status check",
+                  "await": false,
+                  "timeout": 2.0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "close_ticket",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "close ticket {ticket_id}",
+              "mods": [
+                "strict"
+              ],
+              "regex": "close ticket (?P<ticket_id>.+)"
+            },
+            {
+              "text": "resolve ticket {ticket_id}",
+              "mods": [],
+              "regex": "resolve ticket (?P<ticket_id>.+)"
+            },
+            {
+              "text": "issue resolved",
+              "mods": [],
+              "regex": "issue resolved"
+            },
+            {
+              "text": "problem fixed",
+              "mods": [],
+              "regex": "problem fixed"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Closing ticket {ticket_id?your ticket}. Thank you for confirming the issue is resolved!"
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "ticketing",
+                  "function": "close_ticket",
+                  "intent": "close ticket",
+                  "await": false,
+                  "timeout": 2.0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "capabilities": []
+}

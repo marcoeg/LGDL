@@ -1,9 +1,9 @@
 import uuid
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Set
 from pathlib import Path
 from ..parser.parser import parse_lgdl
-from ..parser.ir import compile_game
+from ..parser.ir import compile_game, extract_capability_allowlist
 from .matcher import TwoStageMatcher
 from .firewall import sanitize
 from .policy import PolicyGuard
@@ -48,11 +48,39 @@ def eval_condition(cond: Dict[str, Any], score: float, threshold: float, last_st
     return False
 
 class LGDLRuntime:
-    def __init__(self, compiled):
+    def __init__(
+        self,
+        compiled: Dict[str, Any],
+        allowlist: Optional[Set[str]] = None,
+        capability_contract_path: Optional[str] = None
+    ):
+        """
+        Initialize LGDL runtime with per-game configuration.
+
+        Args:
+            compiled: Compiled game IR (output of compile_game)
+            allowlist: Set of allowed capability functions. If None, auto-extracted from IR.
+            capability_contract_path: Path to capability_contract.json. If None, capabilities disabled.
+
+        Note:
+            Backward compatible: If allowlist/capability_contract_path not provided,
+            falls back to extracting allowlist from IR and disabling capabilities.
+        """
         self.compiled = compiled
         self.matcher = TwoStageMatcher()
-        self.policy = PolicyGuard(allowlist={"check_availability"})
-        self.cap = CapabilityClient(str(Path(__file__).resolve().parents[2] / "examples" / "medical" / "capability_contract.json"))
+
+        # Auto-extract allowlist from IR if not provided
+        if allowlist is None:
+            allowlist = extract_capability_allowlist(compiled)
+
+        self.policy = PolicyGuard(allowlist=allowlist)
+
+        # Only create CapabilityClient if contract path provided
+        if capability_contract_path:
+            self.cap = CapabilityClient(capability_contract_path)
+        else:
+            self.cap = None
+
         self.templates = TemplateRenderer()
         self.negotiation = NegotiationLoop(
             max_rounds=int(os.getenv("LGDL_NEGOTIATION_MAX_ROUNDS", "3")),
@@ -177,6 +205,9 @@ class LGDLRuntime:
             func = call.get("function")
             if not self.policy.allowed(func):
                 return "Not allowed.", None, "err"
+            # Check if capabilities are enabled
+            if not self.cap:
+                return "Capabilities not configured.", None, "err"
             payload = {}
             for k in ("doctor","date"):
                 if k in params and params[k] is not None:
