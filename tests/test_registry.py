@@ -120,26 +120,29 @@ def test_reload_not_found():
 async def test_client():
     """Create test client for FastAPI app."""
     from httpx import AsyncClient, ASGITransport
-    from lgdl.runtime.api import app, REGISTRY
+    import lgdl.runtime.api as api_module
+    from lgdl.runtime.registry import GameRegistry
     from pathlib import Path
+
+    # Initialize registry for testing (simulating startup event)
+    api_module.REGISTRY = GameRegistry(state_manager=None)  # Stateless for tests
 
     # Manually load the medical game for testing
     examples_dir = Path(__file__).resolve().parents[1] / "examples"
-    REGISTRY.register(
+    api_module.REGISTRY.register(
         "medical_scheduling",
         str(examples_dir / "medical" / "game.lgdl"),
         version="0.1"
     )
 
     async with AsyncClient(
-        transport=ASGITransport(app=app),
+        transport=ASGITransport(app=api_module.app),
         base_url="http://test"
     ) as client:
         yield client
 
-    # Cleanup: clear the registry after tests
-    REGISTRY.games.clear()
-    REGISTRY.runtimes.clear()
+    # Cleanup: reset registry after tests
+    api_module.REGISTRY = None
 
 
 @pytest.mark.asyncio

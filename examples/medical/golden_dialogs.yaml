@@ -1,6 +1,43 @@
 game: medical_scheduling
 version: 0.1
+
+# Realistic Multi-Turn ER Triage Scenarios
+# NOTE: These demonstrate intended conversation flows documented in README.md
+# The current test framework tests each turn independently without state continuity
+# See README.md for complete multi-turn conversation examples
+
 dialogs:
+  # Multi-turn conversation starter: Cardiac emergency
+  - name: cardiac_emergency_complete_flow
+    description: "Complete cardiac emergency triage (see README for full flow)"
+    turns:
+      - input: "I'm having chest pain"
+        expect:
+          move: cardiac_emergency
+          confidence: ">=0.90"
+          response_contains: ["cardiac", "emergency"]
+
+  # Multi-turn conversation starter: Trauma assessment
+  - name: trauma_patient_complete_assessment
+    description: "Trauma patient assessment (see README for full flow)"
+    turns:
+      - input: "I was in a car accident"
+        expect:
+          move: trauma_intake
+          confidence: ">=0.90"
+          response_contains: ["Trauma", "Assessing"]
+
+  # Multi-turn conversation starter: Fall with clarification
+  - name: fall_patient_with_clarification
+    description: "Geriatric fall assessment (see README for full flow)"
+    turns:
+      - input: "I fell down"
+        expect:
+          move: geriatric_fall
+          confidence: "<=0.65"
+          response_contains: ["Fall"]
+
+  # Single-turn tests below (comprehensive coverage)
   - name: doctor_name_present
     turns:
       - input: "I need to see Dr. Smith"
@@ -33,3 +70,137 @@ dialogs:
           confidence: ">=0.50"
           response_contains: ["Attempting to book", "Availability"]
           action: book
+
+  # Pain Assessment Scenarios
+  - name: pain_assessment_confident
+    turns:
+      - input: "severe pain in my back"
+        expect:
+          move: pain_assessment
+          confidence: ">=0.70"
+          response_contains: ["pain", "back", "Assessing"]
+
+  - name: pain_assessment_negotiation
+    turns:
+      - input: "I'm in pain"
+        expect:
+          move: pain_assessment
+          confidence: "<=0.85"
+          response_contains: ["pain", "body"]
+
+  - name: pain_with_level
+    turns:
+      - input: "pain level 8 in my leg"
+        expect:
+          move: pain_assessment
+          confidence: ">=0.75"
+          response_contains: ["8", "leg"]
+
+  # Cardiac Emergency Scenarios
+  - name: cardiac_emergency_chest_pain
+    turns:
+      - input: "chest pain"
+        expect:
+          move: cardiac_emergency
+          confidence: ">=0.90"
+          response_contains: ["cardiac emergency", "emergency team"]
+
+  - name: cardiac_with_radiating_pain
+    turns:
+      - input: "left arm numb and chest pain"
+        expect:
+          move: cardiac_emergency
+          confidence: ">=0.90"
+          response_contains: ["cardiac", "Alerting"]
+
+  # Respiratory Distress Scenarios
+  - name: respiratory_cant_breathe
+    turns:
+      - input: "can't breathe"
+        expect:
+          move: respiratory_distress
+          confidence: ">=0.90"
+          response_contains: ["Respiratory", "oxygen"]
+
+  - name: respiratory_asthma
+    turns:
+      - input: "asthma attack"
+        expect:
+          move: respiratory_distress
+          confidence: ">=0.70"
+          response_contains: ["OK"]
+
+  # Trauma Intake Scenarios
+  - name: trauma_car_accident
+    turns:
+      - input: "car accident"
+        expect:
+          move: trauma_intake
+          confidence: ">=0.90"
+          response_contains: ["Trauma", "Assessing"]
+
+  - name: trauma_broken_bone
+    turns:
+      - input: "broken arm"
+        expect:
+          move: trauma_intake
+          confidence: ">=0.70"
+          response_contains: ["Trauma", "Assessing"]
+
+  - name: trauma_fall_height
+    turns:
+      - input: "fell from ladder"
+        expect:
+          move: trauma_intake
+          confidence: ">=0.75"
+          response_contains: ["Trauma", "Assessing"]
+
+  # Geriatric Fall Scenarios
+  - name: geriatric_fall_simple
+    turns:
+      - input: "fell down"
+        expect:
+          move: geriatric_fall
+          confidence: "<=0.65"
+          response_contains: ["Fall", "location"]
+
+  - name: geriatric_fall_location
+    turns:
+      - input: "elderly patient fell at home"
+        expect:
+          move: geriatric_fall
+          confidence: ">=0.70"
+          response_contains: ["Fall", "home", "fractures"]
+
+  - name: geriatric_hip_injury
+    turns:
+      - input: "hip injury from fall"
+        expect:
+          move: geriatric_fall
+          confidence: ">=0.75"
+          response_contains: ["Fall", "location"]
+
+  # Fever Assessment Scenarios
+  - name: fever_assessment_vague
+    turns:
+      - input: "I have a fever"
+        expect:
+          move: fever_assessment
+          confidence: "<=0.80"
+          response_contains: ["Fever", "noted"]
+
+  - name: fever_with_temp
+    turns:
+      - input: "temperature is 102"
+        expect:
+          move: fever_assessment
+          confidence: ">=0.70"
+          response_contains: ["102", "Fever"]
+
+  - name: fever_high_priority
+    turns:
+      - input: "running a fever of 104"
+        expect:
+          move: fever_assessment
+          confidence: ">=0.75"
+          response_contains: ["104", "Fever"]

@@ -1,13 +1,14 @@
-# LGDL v1.0 Alpha Foundation
+# LGDL v1.0 Beta
 
 Language-Game Definition Language (LGDL) lets you describe conversational "games"—sets of moves, triggers, and actions—that can be parsed, compiled to an intermediate representation, and executed at runtime.
 
-**v1.0 Alpha Foundation** adds critical **security**, **scalability**, and **determinism** improvements:
+**v1.0 Beta** adds critical **security**, **scalability**, **determinism**, and **multi-turn conversation** capabilities:
 
 - 🔒 **Template Security** – AST-based validation preventing RCE (error taxonomy E001-E499)
 - 🎮 **Multi-Game API** – Registry for concurrent games with `/games/{id}/move` endpoints
 - 🎯 **Deterministic Embeddings** – SQLite cache with version locking for reproducible confidence scores
-- 📊 **97+ Tests** – Comprehensive coverage (from 2 tests in MVP)
+- 💬 **Multi-Turn Conversations** – State management with SQLite persistence, context enrichment, and <10ms read/write latency
+- 📊 **196 Tests** – Comprehensive coverage including 36 state management tests
 
 > **Migration from MVP v0.1**: See [CHANGELOG.md](CHANGELOG.md) for breaking changes and [docs/MIGRATION_MVP_TO_V1.md](docs/MIGRATION_MVP_TO_V1.md) for the full migration plan.
 
@@ -37,11 +38,18 @@ Deterministic AST-to-IR conversion (`lgdl/parser/ir.py`) with regex-backed trigg
 - TF-IDF character bigram offline fallback (256-dim)
 - Version lock warnings on model mismatch
 
+### Multi-Turn Conversation State (NEW - v1.0-beta)
+- **Persistent Storage**: SQLite backend (`~/.lgdl/conversations.db`) with conversation and turn history
+- **Context Enrichment**: Short utterances enhanced with conversation history (e.g., "my chest" → "pain in chest")
+- **Performance**: <10ms read/write latency for ongoing conversations
+- **Thread-Safe**: Concurrent conversation access with asyncio locks
+- **Optional**: Disable with `LGDL_STATE_DISABLED=1` for stateless mode
+
 ### Tooling
 - CLI (`lgdl`) for validation, compilation, and serving
 - Example games: medical scheduling, simple greeting
 - Golden dialog testing framework
-- Comprehensive pytest coverage
+- Comprehensive pytest coverage (196 tests)
 
 ---
 
@@ -54,12 +62,18 @@ lgdl/
   runtime/         # Multi-game registry, matcher, policy, capabilities
     templates.py   # Secure template renderer
     registry.py    # Game registry for multi-game support
-    negotiation.py # Negotiation state management (P1-1, WIP)
+    negotiation.py # Negotiation state management
+    state.py       # Multi-turn conversation state manager (NEW v1.0-beta)
+    context.py     # Context enrichment for short utterances (NEW v1.0-beta)
+    storage/       # Persistent storage backends (NEW v1.0-beta)
+      sqlite.py    # SQLite conversation storage
   cli/             # Click-based `lgdl` CLI with serve command
   errors.py        # Error taxonomy (E001-E499)
 examples/medical/  # Sample game + golden dialogs + capability contract
 scripts/           # Golden runner utilities
-tests/             # 97+ pytest tests covering all features
+tests/             # 196 pytest tests covering all features
+  test_state_manager.py   # 36 state management tests (NEW)
+  test_context.py         # Context enrichment tests (NEW)
 docs/              # Migration guides, implementation plans
 CHANGELOG.md       # Full version history
 ```
@@ -208,15 +222,20 @@ uv run lgdl serve --games medical:examples/medical/game.lgdl --dev
 
 ### Run All Tests
 ```bash
-# All 97+ tests
+# All 196 tests (160 core + 36 state management)
 uv run pytest -v
 
 # Quick mode
 uv run pytest -q
 
-# Specific test files
-uv run pytest tests/test_templates.py -v
-uv run pytest tests/test_registry.py -v
+# Specific test suites
+uv run pytest tests/test_templates.py -v       # Template security (63 tests)
+uv run pytest tests/test_registry.py -v        # Multi-game API (18 tests)
+uv run pytest tests/test_state_manager.py -v   # State management (36 tests)
+uv run pytest tests/test_context.py -v         # Context enrichment (8 tests)
+
+# Run with state management disabled (test backward compatibility)
+LGDL_STATE_DISABLED=1 uv run pytest -v
 ```
 
 ### Golden Dialog Tests
@@ -249,9 +268,46 @@ done
 |---------|-------|-------|
 | Template Security | 63 | `test_errors.py`, `test_templates.py` |
 | Multi-Game API | 18 | `test_registry.py` |
+| **State Management** | **36** | **`test_state_manager.py`** (NEW) |
 | Embedding Cache | 14 | `test_embedding_cache.py` |
-| Parser/Runtime | 2 | `test_conformance.py`, `test_runtime.py` |
-| **Total** | **97+** | |
+| **Context Enrichment** | **8** | **`test_context.py`** (NEW) |
+| Negotiation | 13 | `test_negotiation.py` |
+| Parser/Runtime | 44 | `test_conformance.py`, `test_runtime.py`, etc. |
+| **Total** | **196** | |
+
+### Multi-Turn Conversation Testing (NEW v1.0-beta)
+
+Test real multi-turn conversations with the E2E test script:
+
+```bash
+# Start server on port 5555
+uv run lgdl serve --games medical:examples/medical/game.lgdl --port 5555
+
+# Run multi-turn E2E test (in another terminal)
+python test_multiturn_e2e.py
+```
+
+**Test validates**:
+- 3-turn conversation flow
+- State persistence in `~/.lgdl/conversations.db`
+- Context enrichment for short utterances
+- Turn history tracking
+
+**Sample conversation**:
+```
+Turn 1: "I have severe chest pain"
+  → Matched: cardiac_emergency (0.92 confidence)
+
+Turn 2: "it started an hour ago"
+  → Enriched to: "pain started an hour ago"
+  → Matched: pain_assessment (0.75 confidence)
+
+Turn 3: "yes it's getting worse"
+  → Enriched with previous context
+  → Matched: pain_assessment (0.75 confidence)
+```
+
+All 3 turns stored in database with conversation ID `test-e2e-{timestamp}`.
 
 ---
 
@@ -281,6 +337,18 @@ export LGDL_GAMES=medical:examples/medical/game.lgdl,greeting:examples/greeting/
 
 # Dev mode (enables hot reload endpoint)
 export LGDL_DEV_MODE=1
+```
+
+#### State Management Configuration (v1.0-beta)
+```bash
+# Disable state management (run in stateless mode like v1.0-alpha)
+export LGDL_STATE_DISABLED=1
+
+# State management is ENABLED by default
+# - Conversations stored in ~/.lgdl/conversations.db
+# - Turn history persisted across server restarts
+# - Context enrichment for short utterances
+# - <10ms read/write latency
 ```
 
 ---
@@ -501,21 +569,80 @@ See [docs/MIGRATION_MVP_TO_V1.md](docs/MIGRATION_MVP_TO_V1.md) for full details.
 
 ---
 
+## Multi-Turn Conversations (v1.0-beta)
+
+### ✅ Conversation State Management
+
+**Current behavior**: Conversations maintain persistent state with history, context, and turn tracking.
+
+**Capabilities**:
+- ✅ Multi-turn pattern matching with conversation memory
+- ✅ Variable extraction from rich inputs (`{location}`, `{severity}`)
+- ✅ **Context enrichment** for short utterances (e.g., "my chest" → "pain in chest")
+- ✅ **Turn history** persisted in SQLite (`~/.lgdl/conversations.db`)
+- ✅ **State persistence** survives server restarts
+- ✅ **Sub-10ms latency** for read/write operations
+
+**Example**:
+```
+System: "Where does it hurt?"
+User: "My chest"
+System: [Enriched to "pain in chest"] → Matches pain_assessment
+
+System: "How severe is the pain?"
+User: "It started an hour ago"
+System: [Enriched with previous context] → Continues assessment
+```
+
+The system maintains conversation context and enriches short responses with relevant history.
+
+**Database Schema**:
+- `conversations` table: metadata, turn count, awaiting_response flag
+- `turns` table: full turn history with timestamps, confidence scores
+- `extracted_context` table: parameter tracking across turns
+
+**Performance Benchmarks**:
+```
+Write turn:                3.09ms  ✅
+Read from cache:           0.00ms  ✅
+Read from database (cold): 0.76ms  ✅
+```
+
+### Future Enhancements (v2.0 Roadmap)
+
+Advanced conversation features planned:
+- **Explicit slot filling**: Define required information per move
+- **Auto-prompting**: Automatically ask for missing required slots
+- **Typed validation**: Validate responses against expected types
+- **Conditional execution**: Only call capabilities when all required information collected
+
+---
+
 ## Roadmap
 
-### Completed (v1.0-alpha-foundation)
+### Completed (v1.0-beta)
 - ✅ P0-1: Template Security with AST validation
 - ✅ P0-2: Multi-Game API with Registry
 - ✅ P1-2: Deterministic Embedding Cache
+- ✅ **P1-1: Multi-Turn Conversation State Management** (NEW)
+  - SQLite persistence with turn history
+  - Context enrichment for short utterances
+  - <10ms read/write latency
+  - Thread-safe concurrent access
+- ✅ Negotiation loops with confidence boosting
 
-### In Progress
-- 🚧 P1-1: Negotiation State Management (clarification loops)
-
-### Planned (v1.0)
+### Planned (v1.0-stable)
 - Grammar v1.0: Capability await/timeout, context guards, learning hooks
 - IR compiler updates
-- Learning pipeline
-- Full negotiation support
+- Learning pipeline hooks
+- Enhanced negotiation with backtracking
+
+### Planned (v2.0)
+- **Explicit slot filling**: Required/optional field definitions
+- **Auto-prompting**: Automatic question generation for missing slots
+- **Typed validation**: Range checks, enums, custom validators
+- **Conditional capabilities**: Only execute when all requirements met
+- **Conversation branching**: Multiple dialogue paths with state transitions
 
 See [docs/P0_P1_CRITICAL_FIXES.md](docs/P0_P1_CRITICAL_FIXES.md) for implementation details.
 
@@ -525,11 +652,13 @@ See [docs/P0_P1_CRITICAL_FIXES.md](docs/P0_P1_CRITICAL_FIXES.md) for implementat
 
 LGDL includes 5 example games showcasing different features:
 
-### 1. Medical Scheduling (`examples/medical/`)
-**Features**: Basic appointment booking with negotiation
-- Moves: appointment_request, general_inquiry, book_intent
-- Demonstrates: Uncertainty handling, capability calls, parameter extraction
-- Golden tests: 4 scenarios
+### 1. Medical ER Triage (`examples/medical/`)
+**Features**: Emergency room triage with multi-turn conversations, pattern matching, and capability integration
+- Moves: pain_assessment, cardiac_emergency, respiratory_distress, trauma_intake, geriatric_fall, fever_assessment, appointment_request, book_intent
+- Demonstrates: **Multi-turn state management**, confidence-based routing, variable extraction, context enrichment, external capability calls, safety-critical pattern matching
+- Golden tests: 23 scenarios
+- **NEW v1.0-beta**: Multi-turn conversations with context enrichment - can now process follow-up responses like "my chest" or "it started an hour ago" by enriching with conversation history
+- See [`examples/medical/README.md`](examples/medical/README.md) for complete documentation including real multi-turn conversation examples
 
 ### 2. Greeting (`examples/greeting/`)
 **Features**: Simple conversational interactions

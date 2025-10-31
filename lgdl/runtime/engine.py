@@ -1,5 +1,6 @@
 import uuid
 import os
+from datetime import datetime
 from typing import Dict, Any, List, Optional, Set
 from pathlib import Path
 from ..parser.parser import parse_lgdl
@@ -10,6 +11,9 @@ from .policy import PolicyGuard
 from .capability import CapabilityClient
 from .templates import TemplateRenderer
 from .negotiation import NegotiationLoop, NegotiationResult
+from .state import StateManager, Turn
+from .context import ContextEnricher
+from .response_parser import ResponseParser
 from ..errors import RuntimeError as LGDLRuntimeError
 
 def eval_condition(cond: Dict[str, Any], score: float, threshold: float, last_status: str, ctx: Dict[str, Any]) -> bool:
@@ -52,7 +56,8 @@ class LGDLRuntime:
         self,
         compiled: Dict[str, Any],
         allowlist: Optional[Set[str]] = None,
-        capability_contract_path: Optional[str] = None
+        capability_contract_path: Optional[str] = None,
+        state_manager: Optional[StateManager] = None
     ):
         """
         Initialize LGDL runtime with per-game configuration.
@@ -61,6 +66,7 @@ class LGDLRuntime:
             compiled: Compiled game IR (output of compile_game)
             allowlist: Set of allowed capability functions. If None, auto-extracted from IR.
             capability_contract_path: Path to capability_contract.json. If None, capabilities disabled.
+            state_manager: StateManager for multi-turn conversations. If None, conversations are stateless.
 
         Note:
             Backward compatible: If allowlist/capability_contract_path not provided,
@@ -88,9 +94,30 @@ class LGDLRuntime:
         )
         self.negotiation_enabled = os.getenv("LGDL_NEGOTIATION", "1") == "1"
 
+        # State management for multi-turn conversations
+        self.state_manager = state_manager
+        self.context_enricher = ContextEnricher() if state_manager else None
+        self.response_parser = ResponseParser() if state_manager else None
+
     async def process_turn(self, conversation_id: str, user_id: str, text: str, context: Dict[str, Any]):
+        # Load conversation state if state management is enabled
+        state = None
+        if self.state_manager:
+            state = await self.state_manager.get_or_create(conversation_id)
+
+        # Sanitize input
         cleaned, flagged = sanitize(text)
-        match = self.matcher.match(cleaned, self.compiled)
+
+        # Apply context enrichment if state management is enabled
+        input_for_matching = cleaned
+        if self.state_manager and self.context_enricher and state:
+            enriched_result = self.context_enricher.enrich_input(cleaned, state)
+            if enriched_result.enrichment_applied:
+                input_for_matching = enriched_result.enriched_input
+                print(f"[Context] Enriched: '{cleaned}' → '{input_for_matching}'")
+
+        # Match against moves using potentially enriched input
+        match = self.matcher.match(input_for_matching, self.compiled)
         if not match["move"]:
             return {
                 "move_id": "none",
@@ -190,6 +217,38 @@ class LGDLRuntime:
         if negotiation_result:
             result["negotiation"] = self._negotiation_to_manifest(negotiation_result)
 
+        # Store turn in conversation history if state management is enabled
+        if self.state_manager and state:
+            turn = Turn(
+                turn_num=state.turn_count + 1,
+                timestamp=datetime.utcnow(),
+                user_input=text,
+                sanitized_input=cleaned,
+                matched_move=mv["id"],
+                confidence=float(score),
+                response=response_acc,
+                extracted_params=params
+            )
+            updated_state = await self.state_manager.update(conversation_id, turn, extracted_params=params)
+
+            # Parse response for questions AFTER storing turn (critical for context enrichment)
+            if self.response_parser:
+                parsed_response = self.response_parser.parse_response(response_acc)
+
+                # Update conversation state with question tracking
+                if parsed_response.has_questions:
+                    updated_state.awaiting_response = True
+                    updated_state.last_question = parsed_response.primary_question
+                    print(f"[Question Detected] Awaiting response to: {updated_state.last_question}")
+                else:
+                    updated_state.awaiting_response = False
+                    updated_state.last_question = None
+
+                # Save the updated state back to database
+                await self.state_manager.persistent_storage.save_conversation(updated_state)
+                # Update cache
+                await self.state_manager.ephemeral_cache.set(f"persistent:{conversation_id}", updated_state)
+
         return result
 
     async def _exec_action(self, action: Dict[str, Any], params: Dict[str, Any]):
@@ -246,8 +305,9 @@ class LGDLRuntime:
 
     async def _prompt_user(self, conversation_id: str, question: str, options: List[str]) -> str:
         """
-        Stub for user prompting (not implemented in MVP).
+        Prompt user for clarification during negotiation.
 
+        If state management is enabled, marks conversation as awaiting response.
         In production, this would send message via async channel and await response.
         For tests, mock this method using unittest.mock.patch.
 
@@ -262,6 +322,11 @@ class LGDLRuntime:
         Raises:
             NotImplementedError: Always (stub implementation)
         """
+        # Mark conversation as awaiting response if state management enabled
+        if self.state_manager:
+            await self.state_manager.set_awaiting_response(conversation_id, question)
+            print(f"[Negotiation] Awaiting user response to: {question}")
+
         raise NotImplementedError(
             "User prompting not implemented in MVP. "
             "Mock this method in tests with unittest.mock.patch."

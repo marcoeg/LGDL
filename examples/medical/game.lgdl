@@ -1,8 +1,9 @@
 game medical_scheduling {
-  description: "Schedule appointments with doctors and negotiate when uncertain."
+  description: "Advanced ER triage system with pain, cardiac, respiratory, trauma, fall, and fever assessment, plus appointment scheduling."
 
   capabilities {
     appointment_system: ["check_availability", "book"]
+    medical: ["assess_pain", "code_blue", "check_oxygen", "trauma_assessment", "fall_protocol", "fever_protocol"]
   }
 
   moves {
@@ -13,17 +14,18 @@ game medical_scheduling {
         "appointment with Dr. {doctor}",
         "see {doctor}" (fuzzy),
         "book with {doctor}" (fuzzy),
-        "see {doctor} at {date}" (fuzzy)
+        "see {doctor} at {date}" (fuzzy),
+        "I need to see a doctor",
+        "I want to make an appointment"
       ]
-      confidence: high
+      confidence: medium
 
       if uncertain {
         ask for clarification: "Is this for a specific doctor or any provider?"
       }
 
       when confident {
-        respond with: "I can check availability for {doctor?any provider}."
-        appointment_system.check_availability for "doctor availability" timeout 3
+        respond with: "I can help you schedule an appointment{doctor? with doctor}. To find the best time for you, can you tell me: What type of visit is this for (check-up, follow-up, new concern)? Do you have any preferred days or times? Is this urgent or routine?"
       }
     }
 
@@ -47,13 +49,172 @@ game medical_scheduling {
       when user says something like: [
         "book appointment with {doctor}" (strict),
         "book with Dr. {doctor}" (strict),
-        "schedule me with {doctor}" (fuzzy)
+        "schedule me with {doctor}" (fuzzy),
+        "book appointment",
+        "schedule appointment",
+        "make appointment"
+      ]
+      confidence: low
+
+      if uncertain {
+        ask for clarification: "Would you like to book an appointment? If so, with which doctor?"
+      }
+
+      when confident {
+        respond with: "I'd be happy to help you book an appointment{doctor? with doctor}. Before I can schedule this, I need a few details: What date and time work best for you? What is the reason for your visit? Do you have any specific preferences or requirements?"
+      }
+    }
+
+    move pain_assessment {
+      when user says something like: [
+        "I'm in pain" (fuzzy),
+        "I have pain",
+        "pain in {location}",
+        "pain in my {location}",
+        "it hurts in {location}",
+        "pain level {level}",
+        "severe pain in {location}",
+        "{location} is killing me",
+        "{location} hurts",
+        "started {timeframe} ago",
+        "it started {timeframe} ago",
+        "it started {timeframe} ago in {location}",
+        "it started {timeframe} ago in the {location}",
+        "it's constant",
+        "it comes and goes",
+        "constant pain",
+        "comes and goes",
+        "no other symptoms",
+        "yes {symptom}",
+        "I feel {symptom}",
+        "pain is {description}"
+      ]
+      confidence: low
+
+      if uncertain {
+        ask for clarification: "I can help assess your pain. Where does it hurt, and how severe is it on a scale of 1-10?"
+      }
+
+      when confident {
+        respond with: "I understand you have {level?pain} in your {location?body}. Let me ask a few quick questions: When did this pain start? Is it constant or does it come and go? Any other symptoms like nausea, dizziness, or shortness of breath?"
+      }
+    }
+
+    move cardiac_emergency {
+      when user says something like: [
+        "chest pain" (strict),
+        "pain in chest",
+        "pain in my chest",
+        "my chest hurts",
+        "heart attack" (strict),
+        "can't breathe and chest hurts",
+        "pressure in chest",
+        "crushing chest pain",
+        "left arm numb and chest pain",
+        "radiating pain down arm"
       ]
       confidence: medium
 
+      if uncertain {
+        ask for clarification: "I want to make sure I understand - are you experiencing chest pain or discomfort right now?"
+      }
+
       when confident {
-        respond with: "Attempting to book {doctor}."
-        appointment_system.book for "booking" timeout 5
+        respond with: "I understand you're having chest pain. This is very important. Can you describe it for me? Is it sharp, dull, or pressure-like? Does it radiate to your arm, jaw, or back? Are you also experiencing sweating, nausea, or shortness of breath?"
+      }
+    }
+
+    move respiratory_distress {
+      when user says something like: [
+        "can't breathe" (strict),
+        "trouble breathing",
+        "short of breath",
+        "shortness of breath",
+        "wheezing badly",
+        "asthma attack",
+        "difficulty breathing",
+        "gasping for air",
+        "breathing hard"
+      ]
+      confidence: medium
+
+      if uncertain {
+        ask for clarification: "I want to understand your breathing difficulty. Can you tell me more about what you're experiencing?"
+      }
+
+      when confident {
+        respond with: "I understand you're having trouble breathing. This is important. Can you tell me: How long has this been going on? Is it getting worse? Do you have a history of asthma or lung problems? Are you experiencing any chest pain, dizziness, or blue lips/fingers?"
+      }
+    }
+
+    move trauma_intake {
+      when user says something like: [
+        "car accident" (strict),
+        "I was in a car accident",
+        "vehicle accident",
+        "fell from {height}",
+        "injury from {mechanism}",
+        "broken {body_part}",
+        "I broke my {body_part}",
+        "bleeding from {location}",
+        "I'm bleeding",
+        "severe injury",
+        "motorcycle accident",
+        "hit by a car"
+      ]
+      confidence: low
+
+      if uncertain {
+        ask for clarification: "I want to help. Can you tell me what happened and what injuries you have?"
+      }
+
+      when confident {
+        respond with: "I understand you had {mechanism?an injury}. I need to ask you some important questions: What type of accident or injury was it? Are you bleeding? If so, where and how much? Can you move all your limbs? Did you lose consciousness at any point? Are you experiencing any numbness or tingling?"
+      }
+    }
+
+    move geriatric_fall {
+      when user says something like: [
+        "fell down" (fuzzy),
+        "patient fell",
+        "elderly patient fell at {location}",
+        "hip injury from fall",
+        "can't get up after falling",
+        "I fell",
+        "fell at home"
+      ]
+      confidence: low
+
+      if uncertain {
+        ask for clarification: "I want to help. Did you or someone else have a fall? Can you tell me more about what happened?"
+      }
+
+      when confident {
+        respond with: "I understand there was a fall{location? at location}. This is important - let me ask you some questions: Did you hit your head? Are you able to move all your limbs? Is there any visible bleeding or deformity? Any loss of consciousness?"
+      }
+    }
+
+    move fever_assessment {
+      when user says something like: [
+        "I have a fever",
+        "temperature is {temp}",
+        "running a fever of {temp}",
+        "feel feverish",
+        "burning up",
+        "high temperature",
+        "I'm feverish",
+        "my temp is {temp}",
+        "feeling hot",
+        "fever of {temp}"
+      ]
+      confidence: low
+
+      if uncertain {
+        ask for clarification: "What's your temperature? Do you have other symptoms?"
+      }
+
+      when confident {
+        respond with: "I understand you have a fever{temp? at temp°F}. Let me ask you some questions to assess this properly: How long have you had the fever? What is your current temperature if you know it? Are you experiencing any chills, sweating, body aches, headache, cough, or other symptoms? Have you taken any fever-reducing medication?"
       }
     }
   }

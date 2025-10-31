@@ -9,11 +9,12 @@ Copyright (c) 2025 Graziano Labs Corp.
 
 import hashlib
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from ..parser.parser import parse_lgdl
 from ..parser.ir import compile_game
 from .engine import LGDLRuntime
+from .state import StateManager
 
 
 class GameRegistry:
@@ -27,10 +28,17 @@ class GameRegistry:
     - File hash for cache invalidation
     """
 
-    def __init__(self):
-        """Initialize empty registry."""
+    def __init__(self, state_manager: Optional[StateManager] = None):
+        """
+        Initialize empty registry.
+
+        Args:
+            state_manager: Optional StateManager for multi-turn conversations.
+                          If None, all games run in stateless mode.
+        """
         self.games: Dict[str, Dict[str, Any]] = {}
         self.runtimes: Dict[str, LGDLRuntime] = {}
+        self.state_manager = state_manager
 
     def register(self, game_id: str, path: str, version: str = "0.1"):
         """
@@ -81,10 +89,11 @@ class GameRegistry:
             "capability_contract_path": capability_contract_path
         }
 
-        # Create per-game runtime with auto-extracted allowlist and capability contract
+        # Create per-game runtime with auto-extracted allowlist, capability contract, and state manager
         self.runtimes[game_id] = LGDLRuntime(
             compiled=compiled,
-            capability_contract_path=capability_contract_path
+            capability_contract_path=capability_contract_path,
+            state_manager=self.state_manager
         )
 
     def get_runtime(self, game_id: str) -> LGDLRuntime:

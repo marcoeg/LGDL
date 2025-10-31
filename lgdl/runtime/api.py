@@ -13,11 +13,14 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import time, uuid, os
 from pathlib import Path
 from .registry import GameRegistry
+from .state import StateManager
+from .storage.sqlite import SQLiteStateStorage
 
 app = FastAPI(title="LGDL Runtime", version="0.2")
 
-# Global registry
-REGISTRY = GameRegistry()
+# Global registry and state manager
+STATE_MANAGER: Optional[StateManager] = None
+REGISTRY: Optional[GameRegistry] = None
 DEV_MODE = os.getenv("LGDL_DEV_MODE", "0") == "1"
 
 
@@ -40,7 +43,27 @@ class MoveResponse(BaseModel):
 
 @app.on_event("startup")
 async def load_games():
-    """Load games specified in LGDL_GAMES env var or default."""
+    """
+    Load games and initialize state management.
+
+    State management is enabled by default with SQLite backend.
+    Set LGDL_STATE_DISABLED=1 to run in stateless mode.
+    """
+    global STATE_MANAGER, REGISTRY
+
+    # Initialize state management (unless explicitly disabled)
+    if os.getenv("LGDL_STATE_DISABLED", "0") != "1":
+        storage = SQLiteStateStorage()  # Uses ~/.lgdl/conversations.db by default
+        STATE_MANAGER = StateManager(persistent_storage=storage, ephemeral_ttl=300)
+        print("[Startup] State management enabled with SQLite backend")
+    else:
+        STATE_MANAGER = None
+        print("[Startup] State management disabled (stateless mode)")
+
+    # Initialize registry with state manager
+    REGISTRY = GameRegistry(state_manager=STATE_MANAGER)
+
+    # Load games
     games_spec = os.getenv("LGDL_GAMES")
     if games_spec:
         # Format: "medical:examples/medical/game.lgdl,er:examples/er_triage.lgdl"

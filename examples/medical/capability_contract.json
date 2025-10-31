@@ -1,26 +1,83 @@
 {
-  "name": "check_availability",
-  "timeout_ms": 3000,
-  "max_retries": 2,
-  "request_schema": {
-    "type": "object",
-    "properties": {
-      "doctor": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "date": {
-        "type": [
-          "string",
-          "null"
-        ]
+  "service": "medical_scheduling",
+  "version": "1.0",
+  "description": "Emergency room triage and appointment scheduling system with comprehensive medical assessment capabilities",
+  "capabilities": {
+    "appointment_system": {
+      "description": "Patient appointment scheduling and availability checking",
+      "functions": {
+        "check_availability": {
+          "description": "Check doctor availability for appointments",
+          "parameters": ["doctor", "date"],
+          "returns": "available time slots",
+          "timeout_ms": 3000
+        },
+        "book": {
+          "description": "Book appointment with specified doctor",
+          "parameters": ["doctor", "date", "time"],
+          "returns": "confirmation details",
+          "timeout_ms": 5000
+        }
       }
     },
-    "additionalProperties": false
+    "medical": {
+      "description": "Emergency medical assessment and triage protocols",
+      "functions": {
+        "assess_pain": {
+          "description": "Assess pain severity and location to determine urgency level",
+          "parameters": ["location", "level"],
+          "returns": "urgency level (high/medium/low) and estimated wait time",
+          "timeout_ms": 3000,
+          "notes": "Uses numeric pain scale (1-10) or descriptive terms (severe/moderate/mild)"
+        },
+        "code_blue": {
+          "description": "Initiate cardiac emergency protocol and alert emergency team",
+          "parameters": [],
+          "returns": "emergency team ETA and response status",
+          "timeout_ms": 1000,
+          "priority": "critical",
+          "notes": "Triggers immediate life-saving response for suspected cardiac events"
+        },
+        "check_oxygen": {
+          "description": "Measure patient oxygen saturation levels",
+          "parameters": [],
+          "returns": "oxygen saturation percentage and respiratory status",
+          "timeout_ms": 2000,
+          "notes": "Normal range: 95-100%, alerts triggered below 90%"
+        },
+        "trauma_assessment": {
+          "description": "Evaluate trauma severity based on injury mechanism and presentation",
+          "parameters": ["mechanism", "body_part", "bleeding"],
+          "returns": "trauma level (1-5) and recommended treatment plan",
+          "timeout_ms": 3000,
+          "notes": "Level 1 is highest priority requiring immediate intervention"
+        },
+        "fall_protocol": {
+          "description": "Geriatric fall assessment for fractures and head injury screening",
+          "parameters": ["location", "head_injury"],
+          "returns": "fall assessment results and estimated wait time",
+          "timeout_ms": 3000,
+          "notes": "Mandatory for patients over 65 or with anticoagulant use"
+        },
+        "fever_protocol": {
+          "description": "Fever assessment to determine infection severity and sepsis risk",
+          "parameters": ["temp"],
+          "returns": "fever severity classification and wait time",
+          "timeout_ms": 2000,
+          "notes": "High priority for temp >= 103°F or immunocompromised patients"
+        }
+      }
+    }
   },
   "pii_fields": [
-    "doctor"
-  ]
+    "doctor",
+    "patient_name",
+    "date_of_birth",
+    "medical_record_number"
+  ],
+  "security": {
+    "hipaa_compliant": true,
+    "encryption_required": true,
+    "audit_logging": true
+  }
 }
