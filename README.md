@@ -1,8 +1,25 @@
-# LGDL v1.0
+# LGDL v1.0-RC (Release Candidate)
 
 Language-Game Definition Language (LGDL) lets you describe conversational "games"—sets of moves, triggers, and actions—that can be parsed, compiled to an intermediate representation, and executed at runtime.
 
-**v1.0** adds critical **security**, **scalability**, **determinism**, **multi-turn conversation**, and **slot-filling** capabilities:
+**v1.0-RC** is **feature-complete** with all core conversational capabilities. Remaining work before v1.0 production: hardening, monitoring, and production storage backends.
+
+## Status: v1.0-RC (2025-10-31)
+
+**Core Features**: ✅ Complete
+**Production Hardening**: 🚧 In progress (see [V1_ROADMAP.md](docs/V1_ROADMAP.md))
+**Tests**: 218/218 passing
+**What's New**: Declarative slot-filling for multi-turn information gathering
+
+### Version Timeline
+- **v1.0-alpha** (Complete): Foundation with security, multi-game, caching
+- **v1.0-beta** (Complete): State management, context enrichment, multi-turn conversations
+- **v1.0-RC** (Current): Slot-filling for structured information gathering
+- **v1.0** (8-10 weeks): Production storage, monitoring, load testing, security hardening
+
+---
+
+## Core Capabilities (v1.0-RC)
 
 - 🔒 **Template Security** – AST-based validation preventing RCE (error taxonomy E001-E499)
 - 🎮 **Multi-Game API** – Registry for concurrent games with `/games/{id}/move` endpoints
