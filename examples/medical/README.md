@@ -44,16 +44,16 @@ System: [Enriched with pain context] → Continues assessment with full informat
 - ✅ Turn history tracking
 - ✅ <10ms read/write latency
 
-**Solution**: Waiting for v0.2 slot-filling feature (documented below)
+**Solution**: Waiting for v1.0 slot-filling feature (documented below)
 - Proper multi-turn conversations require explicit slot definitions
 - Auto-prompting for missing information
 - Conditional capability execution when all slots filled
 
 **Workaround** (not recommended): Split moves into initial vs. follow-up patterns
 - Creates maintenance burden
-- Would be replaced when v0.2 ships
+- Would be replaced when v1.0 slot-filling ships
 
-See "Future Vision: v0.2 Multi-Turn Conversations" section below for the long-term solution.
+See "Future Vision: v1.0 Slot-Filling" section below for the long-term solution.
 
 ## Overview
 
@@ -221,7 +221,7 @@ The example includes 23 golden dialog tests covering:
 - 3 geriatric fall tests
 - 3 fever assessment tests
 
-**Note**: Tests validate single-turn pattern matching and confidence thresholds. Multi-turn conversation flows documented in this README cannot be tested until v0.2 state management is implemented.
+**Note**: Tests validate single-turn pattern matching and confidence thresholds. Multi-turn conversation flows work with v1.0-beta state management, but proper slot-filling requires v1.0 completion.
 
 Run tests with:
 ```bash
@@ -282,9 +282,9 @@ move cardiac_emergency {
 }
 ```
 
-## Future Vision: v0.2 Multi-Turn Conversations
+## Future Vision: v1.0 Slot-Filling
 
-Here's what the pain assessment move could look like with v0.2 state management:
+Here's what the pain assessment move could look like with v1.0 slot-filling:
 
 ```lgdl
 move pain_assessment_v2 {
@@ -351,11 +351,11 @@ move pain_assessment_v2 {
 - Type validation (severity must be 1-10)
 - Clean separation between data collection and action
 
-## LGDL v0.2 Features Needed for Production
+## LGDL v1.0 Features Needed for Production
 
 To make this a production-ready ER triage system, LGDL needs:
 
-### Critical Language Features (v0.2+)
+### Critical Language Features (v1.0 Slot-Filling)
 1. **Conversation State Management**
    - Track what questions have been asked
    - Remember user responses across turns

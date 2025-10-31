@@ -1,8 +1,8 @@
 # LGDL v1.0 Roadmap: alpha → beta → production
 
 **Status**: v1.0-beta INFRASTRUCTURE COMPLETE ✅ (2025-10-30)
-**Decision**: Waiting for v0.2 slot-filling for proper multi-turn support
-**Target**: v1.0 production (6-8 weeks)
+**Decision**: Waiting for v1.0 slot-filling for proper multi-turn support
+**Target**: v1.0 production (8-10 weeks)
 
 ## ✅ Infrastructure Complete, ⚠️ Game Design Limitation (2025-10-30)
 
@@ -22,9 +22,9 @@
 
 **Root cause:** The medical example game was designed for demonstration, with all patterns (initial + follow-ups) combined in single moves. Context enrichment works correctly, but there are no separate follow-up moves to route enriched input to. This is a **game design limitation**, not a runtime bug.
 
-**Decision (2025-10-30):** Wait for v0.2 slot-filling feature (proper solution per roadmap lines 256-323)
+**Decision (2025-10-30):** Wait for v1.0 slot-filling feature (proper solution per roadmap lines 256-323)
 - Infrastructure is complete and working correctly
-- Slot-filling is the proper long-term solution
+- Slot-filling is required for production-ready multi-turn conversations
 - Medical example demonstrates limitation but runtime is sound
 
 ---
@@ -46,7 +46,7 @@
 **What's Limited** (game design, not runtime):
 - ⚠️ Medical example lacks follow-up move patterns
 - ⚠️ Users see repeated questions (game routes back to same move)
-- ⚠️ Need v0.2 slot-filling OR game design workarounds
+- ⚠️ Need v1.0 slot-filling OR game design workarounds
 
 **Previous State: v1.0-alpha** ✅ (Complete)
 - Parser, matcher, runtime, API, security, multi-game, caching, negotiation framework
@@ -361,13 +361,13 @@ dialogs:
 **Known Limitations (game design, not runtime):**
 - ⚠️ Medical example game design limits multi-turn UX
 - ⚠️ Enriched input routes back to same move (no separate follow-up moves)
-- ⚠️ Need v0.2 slot-filling feature OR game design workarounds
+- ⚠️ Need v1.0 slot-filling feature OR game design workarounds
 - ⚠️ Negotiation loop framework exists but _prompt_user() not fully implemented
 
 **Estimated Effort**:
 - Original estimate: 1,250 lines, 37 tests, 2-3 weeks
 - **Actual completed: ~1,350 lines (1,100 state + 242 ResponseParser + 8 engine integration), 44 tests**
-- Remaining for v0.2 slot-filling: ~800 lines, 15-20 tests, 2-3 weeks
+- Remaining for v1.0 slot-filling: ~800 lines, 15-20 tests, 2-3 weeks
 
 **Success Criteria** (updated assessment):
 - ⚠️ Multi-turn conversations work in medical example - **INFRASTRUCTURE WORKS, GAME DESIGN LIMITS UX**
@@ -377,17 +377,52 @@ dialogs:
 - ✅ <10ms state read/write latency - **PASSES (3.09ms/0.76ms)**
 - ✅ 100% backward compatibility with v1.0-alpha API - **PASSES**
 
-**Actual Status**: v1.0-beta infrastructure 95% complete - runtime works, needs better game patterns or v0.2 features
+**Actual Status**: v1.0-beta infrastructure 95% complete - runtime works, needs better game patterns or v1.0 slot-filling
 
 ---
 
 ## v1.0: Production Release
 
-**Goal**: Production hardening and performance optimization
+**Goal**: Complete multi-turn support with slot-filling + production hardening
 
 ### Core Tasks
 
-#### 1. Production Storage Backend (~300 lines)
+#### 1. Slot-Filling for Multi-Turn Conversations (~800 lines)
+**Files**:
+- `lgdl/parser/grammar_v0_1.lark` (extend with slot syntax)
+- `lgdl/parser/ir.py` (slot compilation)
+- `lgdl/runtime/slots.py` (new - slot validation and filling)
+- `lgdl/runtime/engine.py` (integrate slot-filling logic)
+
+**Features**:
+- Declarative slot definitions in LGDL syntax
+- Automatic prompting for missing required slots
+- Type validation (string, number, date, enum)
+- Conditional slot filling based on move state
+- Integration with context enrichment
+
+**Example**:
+```lgdl
+move pain_assessment {
+  slots {
+    location: string required
+    severity: range(1, 10) required
+    onset: timeframe required
+  }
+
+  when slot location is missing {
+    ask: "Where does it hurt?"
+  }
+
+  when all_slots_filled {
+    medical.assess_pain(location, severity, onset)
+  }
+}
+```
+
+**Estimated Effort**: ~800 lines, 15-20 tests, 2-3 weeks
+
+#### 2. Production Storage Backend (~300 lines)
 **Files**:
 - `lgdl/runtime/storage/redis.py` (new)
 - `lgdl/runtime/storage/postgres.py` (new)
@@ -399,7 +434,7 @@ dialogs:
 - Connection pooling
 - Automatic failover
 
-#### 2. Performance Optimization
+#### 3. Performance Optimization
 - Pattern cache warming on startup
 - Connection pooling for storage
 - Batch operations for state updates
@@ -412,14 +447,14 @@ dialogs:
 - <20ms state write latency
 - 100+ concurrent conversations
 
-#### 3. Production Safety
+#### 4. Production Safety
 - Rate limiting per user/conversation
 - Circuit breakers for storage failures
 - Automatic state cleanup (TTL enforcement)
 - Graceful degradation when state unavailable
 - Dead letter queue for failed state writes
 
-#### 4. Monitoring & Observability (~400 lines)
+#### 5. Monitoring & Observability (~400 lines)
 **File**: `lgdl/runtime/monitoring.py` (new)
 
 ```python
@@ -443,7 +478,7 @@ class MetricsCollector:
 
 **Dashboard**: Grafana template with key metrics
 
-#### 5. Load Testing
+#### 6. Load Testing
 **Target Capacity**:
 - 100 concurrent conversations
 - <500ms P95 latency (per DESIGN.md line 218)
@@ -456,14 +491,14 @@ class MetricsCollector:
 - Chaos engineering scenarios
 - Stress test suite
 
-#### 6. Security Hardening
+#### 7. Security Hardening
 - State encryption at rest (optional)
 - Conversation access control (user_id validation)
 - PII redaction in stored state
 - Audit logging for state access
 - GDPR compliance (right to be forgotten)
 
-#### 7. Documentation
+#### 8. Documentation
 - Deployment guide (Docker, K8s)
 - Performance tuning guide
 - Monitoring runbook
@@ -483,14 +518,16 @@ class MetricsCollector:
 - ✅ Kubernetes Helm chart
 - ✅ Zero-downtime updates
 
-**Estimated Effort**: 1,500 lines of code, ~4-5 weeks
+**Estimated Effort**: 2,300 lines of code (~800 slot-filling + ~1,500 production), ~6-7 weeks
 
 **Success Criteria**:
-- 99.9% uptime in production
-- All load tests pass
-- Security audit complete
-- Production deployment successful
-- Monitoring dashboards operational
+- ✅ Slot-filling enables proper multi-turn conversations
+- ✅ Medical example demonstrates complete flow without repeated questions
+- ✅ 99.9% uptime in production
+- ✅ All load tests pass
+- ✅ Security audit complete
+- ✅ Production deployment successful
+- ✅ Monitoring dashboards operational
 
 ---
 
@@ -499,12 +536,12 @@ class MetricsCollector:
 | Phase | Duration | Key Milestone | Tests |
 |-------|----------|---------------|-------|
 | **v1.0-alpha** | ✅ Complete | P0/P1 foundation | 96 tests |
-| **v1.0-beta** | 2-3 weeks | Multi-turn conversations | 133 tests |
-| **v1.0** | 4-5 weeks | Production-ready | 150+ tests |
+| **v1.0-beta** | ✅ Complete | State infrastructure | 178 tests |
+| **v1.0** | 8-10 weeks | Slot-filling + Production | 200+ tests |
 
-**Total**: 6-8 weeks to v1.0 production
+**Total**: 8-10 weeks to v1.0 production (from v1.0-beta start)
 
-**Current Status**: Starting v1.0-beta implementation (2025-10-30)
+**Current Status**: v1.0-beta complete (2025-10-30), planning v1.0 slot-filling
 
 ---
 
@@ -595,8 +632,8 @@ move pain_timeframe_response {
 }
 ```
 
-#### Option B: Wait for v0.2 Slot-Filling (Recommended)
-The proper solution is v0.2's slot-filling feature (roadmap lines 256-323):
+#### Option B: Wait for v1.0 Slot-Filling (Recommended)
+The proper solution is v1.0's slot-filling feature (roadmap lines 390-423):
 ```lgdl
 move pain_assessment_v2 {
   slots {
@@ -609,9 +646,9 @@ move pain_assessment_v2 {
 }
 ```
 
-### ✅ DECISION: Wait for v0.2 Slot-Filling (2025-10-30)
+### ✅ DECISION: Wait for v1.0 Slot-Filling (2025-10-30)
 
-**Decision**: Option B selected - wait for v0.2 slot-filling feature rather than implementing game design workarounds.
+**Decision**: Option B selected - wait for v1.0 slot-filling feature rather than implementing game design workarounds.
 
 **Rationale**:
 - Infrastructure is complete and working correctly
@@ -626,4 +663,4 @@ move pain_assessment_v2 {
 3. **Update medical/README.md** to document limitation (P2 - user clarity)
 
 **Status**: v1.0-beta infrastructure COMPLETE ✅
-**Multi-turn UX**: Limited by game design, waiting for v0.2 slot-filling
+**Multi-turn UX**: Limited by game design, waiting for v1.0 slot-filling
