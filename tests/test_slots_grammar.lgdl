@@ -1,0 +1,72 @@
+game test_slots {
+  description: "Test slot-filling grammar"
+
+  capabilities {
+    test: ["test_action"]
+  }
+
+  moves {
+    move simple_slot_test {
+      slots {
+        name: string required
+        age: number optional
+      }
+
+      when user says something like: [
+        "My name is {name}"
+      ]
+      confidence: medium
+
+      when slot name is missing {
+        prompt slot: "What is your name?"
+      }
+
+      when all_slots_filled {
+        respond with: "Hello {name}!"
+      }
+    }
+
+    move range_slot_test {
+      slots {
+        severity: range(1, 10) required
+      }
+
+      when user says something like: [
+        "pain level {severity}"
+      ]
+      confidence: medium
+
+      when slot severity is missing {
+        prompt slot: "On a scale of 1-10, how severe?"
+      }
+
+      when all_slots_filled {
+        test.test_action for "test" timeout 3
+      }
+    }
+
+    move enum_slot_test {
+      slots {
+        color: enum("red", "green", "blue") required
+      }
+
+      when user says something like: [
+        "I like {color}"
+      ]
+      confidence: medium
+    }
+
+    move optional_slot_test {
+      slots {
+        location: string required
+        details: string optional
+        count: number default(1)
+      }
+
+      when user says something like: [
+        "{count} items at {location}"
+      ]
+      confidence: medium
+    }
+  }
+}

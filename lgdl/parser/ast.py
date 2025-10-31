@@ -23,11 +23,31 @@ class Block:
     actions: List[Action]
 
 @dataclass
+class SlotDefinition:
+    """Definition of a single slot in a move"""
+    name: str
+    slot_type: str  # "string" | "number" | "range" | "enum" | "timeframe" | "date"
+    required: bool = True
+    optional: bool = False
+    default: Any = None
+    # For range type
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    # For enum type
+    enum_values: List[str] = field(default_factory=list)
+
+@dataclass
+class SlotBlock:
+    """Container for slot definitions in a move"""
+    slots: List[SlotDefinition] = field(default_factory=list)
+
+@dataclass
 class Move:
     name: str
     triggers: List[Trigger] = field(default_factory=list)
     confidence: Dict[str, Any] = field(default_factory=lambda: {"kind": "numeric", "value": 0.75})
     blocks: List[Block] = field(default_factory=list)
+    slots: Optional[SlotBlock] = None
 
 @dataclass
 class Capability:

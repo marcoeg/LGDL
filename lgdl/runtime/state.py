@@ -42,6 +42,9 @@ class PersistentState:
     current_move_state: Optional[str] = None
     awaiting_response: bool = False
     last_question: Optional[str] = None
+    # Slot-filling state (v1.0)
+    awaiting_slot_for_move: Optional[str] = None
+    awaiting_slot_name: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def add_turn(self, turn: Turn):

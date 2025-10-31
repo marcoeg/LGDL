@@ -34,8 +34,23 @@ def compile_move(mv: Move) -> Dict[str, Any]:
                 "regex": compile_regex(p.text)
             })
         trigz.append({"participant": t.participant, "patterns": pats})
+
     blocks = []
+    slot_prompts = {}  # Map slot names to their prompts
+    slot_conditions = {}  # Map condition types to actions
+
     for b in mv.blocks:
+        # Extract slot-specific conditions for easier runtime access
+        if b.kind == "when" and isinstance(b.condition, dict):
+            if b.condition.get("special") == "slot_missing":
+                slot_name = b.condition.get("slot")
+                # Extract prompt from actions
+                for action in b.actions:
+                    if action.type == "respond" and action.data.get("kind") == "prompt_slot":
+                        slot_prompts[slot_name] = action.data.get("text")
+            elif b.condition.get("special") == "all_slots_filled":
+                slot_conditions["all_slots_filled"] = [a.__dict__ for a in b.actions]
+
         if b.kind == "if_chain":
             chain = []
             for link in b.condition.get("chain", []):
@@ -50,12 +65,39 @@ def compile_move(mv: Move) -> Dict[str, Any]:
                 "condition": b.condition,
                 "actions": [a.__dict__ for a in b.actions]
             })
-    return {
+
+    # Compile slots if present
+    compiled_slots = None
+    if mv.slots is not None and mv.slots.slots:
+        compiled_slots = {}
+        for slot_def in mv.slots.slots:
+            slot_data = {
+                "type": slot_def.slot_type,
+                "required": slot_def.required,
+                "default": slot_def.default
+            }
+            if slot_def.slot_type == "range":
+                # Note: Range bounds are inclusive (min <= value <= max)
+                slot_data["min"] = slot_def.min_value
+                slot_data["max"] = slot_def.max_value
+            elif slot_def.slot_type == "enum":
+                slot_data["enum_values"] = slot_def.enum_values
+            compiled_slots[slot_def.name] = slot_data
+
+    result = {
         "id": mv.name,
         "threshold": _to_threshold(mv.confidence),
         "triggers": trigz,
         "blocks": blocks
     }
+
+    # Add slots to IR if present
+    if compiled_slots:
+        result["slots"] = compiled_slots
+        result["slot_prompts"] = slot_prompts
+        result["slot_conditions"] = slot_conditions
+
+    return result
 
 def extract_capability_allowlist(compiled_ir: Dict[str, Any]) -> Set[str]:
     """

@@ -11,7 +11,7 @@ import json
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any, Dict
 import logging
 
 from ..state import PersistentState, Turn, StorageBackend
@@ -53,6 +53,8 @@ class SQLiteStateStorage(StorageBackend):
                     current_move_state TEXT,
                     awaiting_response INTEGER DEFAULT 0,
                     last_question TEXT,
+                    awaiting_slot_for_move TEXT,
+                    awaiting_slot_name TEXT,
                     metadata TEXT DEFAULT '{}'
                 )
             """)
@@ -86,6 +88,20 @@ class SQLiteStateStorage(StorageBackend):
                 )
             """)
 
+            # Slots table for slot-filling (v1.0)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS slots (
+                    conversation_id TEXT NOT NULL,
+                    move_id TEXT NOT NULL,
+                    slot_name TEXT NOT NULL,
+                    slot_value TEXT NOT NULL,
+                    slot_type TEXT,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (conversation_id, move_id, slot_name),
+                    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+                )
+            """)
+
             # Indexes for performance
             await db.execute("""
                 CREATE INDEX IF NOT EXISTS idx_turns_conversation
@@ -96,6 +112,27 @@ class SQLiteStateStorage(StorageBackend):
                 CREATE INDEX IF NOT EXISTS idx_conversations_updated
                 ON conversations(updated_at)
             """)
+
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_slots_conversation_move
+                ON slots(conversation_id, move_id)
+            """)
+
+            # Migration: Add slot-related columns if they don't exist (v1.0)
+            # Check if awaiting_slot_for_move column exists
+            async with db.execute("PRAGMA table_info(conversations)") as cursor:
+                columns = [row[1] async for row in cursor]
+
+            if "awaiting_slot_for_move" not in columns:
+                logger.info("Migrating conversations table: adding slot-filling columns")
+                await db.execute("""
+                    ALTER TABLE conversations
+                    ADD COLUMN awaiting_slot_for_move TEXT
+                """)
+                await db.execute("""
+                    ALTER TABLE conversations
+                    ADD COLUMN awaiting_slot_name TEXT
+                """)
 
             await db.commit()
 
@@ -116,6 +153,8 @@ class SQLiteStateStorage(StorageBackend):
             current_move_state=None,
             awaiting_response=False,
             last_question=None,
+            awaiting_slot_for_move=None,
+            awaiting_slot_name=None,
             metadata={}
         )
 
@@ -148,7 +187,8 @@ class SQLiteStateStorage(StorageBackend):
             async with db.execute(
                 """
                 SELECT id, created_at, updated_at, current_move_state,
-                       awaiting_response, last_question, metadata
+                       awaiting_response, last_question, awaiting_slot_for_move,
+                       awaiting_slot_name, metadata
                 FROM conversations
                 WHERE id = ?
                 """,
@@ -202,6 +242,8 @@ class SQLiteStateStorage(StorageBackend):
                 current_move_state=row["current_move_state"],
                 awaiting_response=bool(row["awaiting_response"]),
                 last_question=row["last_question"],
+                awaiting_slot_for_move=row["awaiting_slot_for_move"],
+                awaiting_slot_name=row["awaiting_slot_name"],
                 metadata=json.loads(row["metadata"])
             )
 
@@ -221,6 +263,8 @@ class SQLiteStateStorage(StorageBackend):
                     current_move_state = ?,
                     awaiting_response = ?,
                     last_question = ?,
+                    awaiting_slot_for_move = ?,
+                    awaiting_slot_name = ?,
                     metadata = ?
                 WHERE id = ?
                 """,
@@ -229,6 +273,8 @@ class SQLiteStateStorage(StorageBackend):
                     state.current_move_state,
                     1 if state.awaiting_response else 0,
                     state.last_question,
+                    state.awaiting_slot_for_move,
+                    state.awaiting_slot_name,
                     json.dumps(state.metadata),
                     state.conversation_id
                 )
@@ -344,3 +390,134 @@ class SQLiteStateStorage(StorageBackend):
             "avg_turns_per_conversation": round(avg_turns, 2),
             "db_path": self.db_path
         }
+
+    async def save_slot(
+        self,
+        conversation_id: str,
+        move_id: str,
+        slot_name: str,
+        slot_value: Any,
+        slot_type: str = "string"
+    ) -> None:
+        """
+        Save a slot value for a conversation/move pair.
+
+        Args:
+            conversation_id: Conversation identifier
+            move_id: Move identifier
+            slot_name: Name of the slot
+            slot_value: Value to store (will be JSON-serialized)
+            slot_type: Type of slot for metadata
+        """
+        await self._init_db()
+
+        now = datetime.utcnow()
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO slots (conversation_id, move_id, slot_name, slot_value, slot_type, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    conversation_id,
+                    move_id,
+                    slot_name,
+                    json.dumps(slot_value),
+                    slot_type,
+                    now.isoformat()
+                )
+            )
+            await db.commit()
+
+        logger.debug(f"Saved slot {slot_name} for {conversation_id}/{move_id}")
+
+    async def get_slot(
+        self,
+        conversation_id: str,
+        move_id: str,
+        slot_name: str
+    ) -> Optional[Any]:
+        """
+        Get a specific slot value.
+
+        Args:
+            conversation_id: Conversation identifier
+            move_id: Move identifier
+            slot_name: Name of the slot
+
+        Returns:
+            Slot value or None if not found
+        """
+        await self._init_db()
+
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                """
+                SELECT slot_value FROM slots
+                WHERE conversation_id = ? AND move_id = ? AND slot_name = ?
+                """,
+                (conversation_id, move_id, slot_name)
+            ) as cursor:
+                row = await cursor.fetchone()
+                if row:
+                    return json.loads(row[0])
+                return None
+
+    async def get_all_slots_for_move(
+        self,
+        conversation_id: str,
+        move_id: str
+    ) -> Dict[str, Any]:
+        """
+        Get all slots for a conversation/move pair.
+
+        Args:
+            conversation_id: Conversation identifier
+            move_id: Move identifier
+
+        Returns:
+            Dictionary of slot_name -> value
+        """
+        await self._init_db()
+
+        slots = {}
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                """
+                SELECT slot_name, slot_value FROM slots
+                WHERE conversation_id = ? AND move_id = ?
+                """,
+                (conversation_id, move_id)
+            ) as cursor:
+                async for row in cursor:
+                    slot_name, slot_value = row
+                    slots[slot_name] = json.loads(slot_value)
+
+        return slots
+
+    async def clear_slots_for_move(
+        self,
+        conversation_id: str,
+        move_id: str
+    ) -> None:
+        """
+        Clear all slots for a conversation/move pair.
+
+        Args:
+            conversation_id: Conversation identifier
+            move_id: Move identifier
+        """
+        await self._init_db()
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                DELETE FROM slots
+                WHERE conversation_id = ? AND move_id = ?
+                """,
+                (conversation_id, move_id)
+            )
+            await db.commit()
+
+        logger.debug(f"Cleared slots for {conversation_id}/{move_id}")

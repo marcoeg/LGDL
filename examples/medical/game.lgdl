@@ -66,37 +66,54 @@ game medical_scheduling {
     }
 
     move pain_assessment {
+      slots {
+        location: string required
+        severity: range(1, 10) required
+        onset: timeframe required
+        characteristics: string optional
+      }
+
       when user says something like: [
         "I'm in pain" (fuzzy),
+        "I am in pain" (fuzzy),
         "I have pain",
+        "in pain",
         "pain in {location}",
         "pain in my {location}",
         "it hurts in {location}",
-        "pain level {level}",
+        "pain level {severity}",
         "severe pain in {location}",
         "{location} is killing me",
         "{location} hurts",
-        "started {timeframe} ago",
-        "it started {timeframe} ago",
-        "it started {timeframe} ago in {location}",
-        "it started {timeframe} ago in the {location}",
-        "it's constant",
-        "it comes and goes",
-        "constant pain",
-        "comes and goes",
-        "no other symptoms",
-        "yes {symptom}",
-        "I feel {symptom}",
-        "pain is {description}"
+        "hurting",
+        "it hurts"
       ]
       confidence: low
 
-      if uncertain {
-        ask for clarification: "I can help assess your pain. Where does it hurt, and how severe is it on a scale of 1-10?"
+      when slot location is missing {
+        prompt slot: "Where does it hurt?"
       }
 
-      when confident {
-        respond with: "I understand you have {level?pain} in your {location?body}. Let me ask a few quick questions: When did this pain start? Is it constant or does it come and go? Any other symptoms like nausea, dizziness, or shortness of breath?"
+      when slot severity is missing {
+        prompt slot: "On a scale of 1-10, how severe is the pain?"
+      }
+
+      when slot onset is missing {
+        prompt slot: "When did this pain start?"
+      }
+
+      when all_slots_filled {
+        respond with: "Thank you. I understand you have {severity}/10 pain in your {location} that started {onset}. Let me assess the urgency."
+        medical.assess_pain for "pain assessment" timeout 3
+      }
+
+      when successful {
+        respond with: "Based on your symptoms, urgency level is {urgency}. Estimated wait time: {wait_time} minutes. {triage_notes}"
+      }
+
+      when failed {
+        respond with: "I'm having trouble assessing your pain. Let me connect you with a nurse right away."
+        escalate to: nurse
       }
     }
 

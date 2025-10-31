@@ -1,7 +1,7 @@
 from lark import Lark, Transformer, Token
 from pathlib import Path
 from typing import List
-from .ast import Game, Move, Trigger, Pattern, Block, Action, Capability
+from .ast import Game, Move, Trigger, Pattern, Block, Action, Capability, SlotBlock, SlotDefinition
 
 GRAMMAR_PATH = Path(__file__).resolve().parents[1] / "spec" / "grammar_v0_1.lark"
 
@@ -83,14 +83,17 @@ class ToAST(Transformer):
         triggers: List[Trigger] = []
         blocks: List[Block] = []
         confidence = {"kind":"numeric","value":0.75}
+        slots: SlotBlock = None
         for it in items[1:]:
             if isinstance(it, Trigger):
                 triggers.append(it)
             elif isinstance(it, Block):
                 blocks.append(it)
+            elif isinstance(it, SlotBlock):
+                slots = it
             elif isinstance(it, dict) and it.get("confidence") is not None:
                 confidence = it["confidence"]
-        return Move(name=name, triggers=triggers, blocks=blocks, confidence=confidence)
+        return Move(name=name, triggers=triggers, blocks=blocks, confidence=confidence, slots=slots)
 
     def move_elem(self, items):
         return items[0] if items else None
@@ -142,6 +145,85 @@ class ToAST(Transformer):
             return float(tok.value)
         return tok.value if hasattr(tok, "value") else str(tok)
 
+    def slots_block(self, items):
+        """Parse slots block: slots { ... }"""
+        slots = [s for s in items if isinstance(s, SlotDefinition)]
+        return SlotBlock(slots=slots)
+
+    def slot_definition(self, items):
+        """Parse slot definition: name: type required"""
+        name = items[0].value if hasattr(items[0], "value") else str(items[0])
+        slot_type_data = items[1]  # dict with type info
+
+        # Extract modifiers
+        required = True
+        optional = False
+        default = None
+
+        for mod in items[2:]:
+            if isinstance(mod, dict):
+                if mod.get("modifier") == "required":
+                    required = True
+                    optional = False
+                elif mod.get("modifier") == "optional":
+                    required = False
+                    optional = True
+                elif mod.get("modifier") == "default":
+                    default = mod.get("value")
+
+        return SlotDefinition(
+            name=name,
+            slot_type=slot_type_data.get("type"),
+            required=required,
+            optional=optional,
+            default=default,
+            min_value=slot_type_data.get("min"),
+            max_value=slot_type_data.get("max"),
+            enum_values=slot_type_data.get("enum_values", [])
+        )
+
+    def slot_type(self, items):
+        """Parse slot type: SLOT_TYPE_SIMPLE"""
+        if not items:
+            return {"type": "string"}
+
+        first = items[0]
+        type_name = first.value if hasattr(first, "value") else str(first)
+        return {"type": type_name}
+
+    def slot_type_range(self, items):
+        """Parse range type: range(min, max)"""
+        min_val = float(items[0].value) if hasattr(items[0], "value") else float(items[0])
+        max_val = float(items[1].value) if hasattr(items[1], "value") else float(items[1])
+        return {"type": "range", "min": min_val, "max": max_val}
+
+    def slot_type_enum(self, items):
+        """Parse enum type: enum(val1, val2, ...)"""
+        enum_vals = items[0] if isinstance(items[0], list) else []
+        return {"type": "enum", "enum_values": enum_vals}
+
+    def slot_modifier(self, items):
+        """Parse slot modifier: SLOT_MOD_SIMPLE"""
+        if not items:
+            return {"modifier": "required"}
+
+        first = items[0]
+        mod_name = first.value if hasattr(first, "value") else str(first)
+        return {"modifier": mod_name}
+
+    def slot_modifier_default(self, items):
+        """Parse default modifier: default(value)"""
+        return {"modifier": "default", "value": items[0]}
+
+    def slot_is_missing(self, items):
+        """Parse: slot location is missing"""
+        slot_name = items[0].value if hasattr(items[0], "value") else str(items[0])
+        return {"special": "slot_missing", "slot": slot_name}
+
+    def all_slots_filled(self, items):
+        """Parse: all_slots_filled"""
+        return {"special": "all_slots_filled"}
+
     def when_block(self, items):
         cond = items[0]
         actions = [a for a in items[1:] if isinstance(a, Action)]
@@ -183,6 +265,9 @@ class ToAST(Transformer):
         if not items:
             return {"special": ""}
         tok = items[0]
+        # If it's already a dict (from slot_condition), return it directly
+        if isinstance(tok, dict):
+            return tok
         text = tok.value if hasattr(tok, "value") else str(tok)
         if text == "confidence is below threshold":
             return {"special": "uncertain"}
@@ -204,6 +289,11 @@ class ToAST(Transformer):
     def ask_clarification(self, items):
         text = items[-1]
         return Action(type="respond", data={"text": text, "kind": "clarify"})
+
+    def prompt_slot(self, items):
+        """Parse: prompt: "Where does it hurt?" """
+        text = items[-1]
+        return Action(type="respond", data={"text": text, "kind": "prompt_slot"})
 
     def respond_with(self, items):
         text = items[-1]

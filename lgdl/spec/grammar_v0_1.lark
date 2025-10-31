@@ -26,6 +26,7 @@ move_def: "move" IDENT ("extends" IDENT)? "{" move_elem* "}"
 
 move_elem: trigger_clause
          | confidence_clause
+         | slots_block
          | when_block
          | if_block
          | COMMENT
@@ -40,6 +41,21 @@ modifier_list: MODIFIER ("," MODIFIER)*
 
 confidence_clause: ("confidence" "needed:" | "confidence:") confidence_expr
 confidence_expr: NUMBER | CONF_LEVEL
+
+// Slots (v1.0 slot-filling feature)
+slots_block: "slots" "{" slot_definition+ "}"
+slot_definition: IDENT ":" slot_type slot_modifier*
+
+slot_type: SLOT_TYPE_SIMPLE
+         | "range" "(" NUMBER "," NUMBER ")"      -> slot_type_range
+         | "enum" "(" string_list ")"             -> slot_type_enum
+
+SLOT_TYPE_SIMPLE.2: "string" | "number" | "timeframe" | "date"
+
+slot_modifier: SLOT_MOD_SIMPLE
+             | "default" "(" value ")"             -> slot_modifier_default
+
+SLOT_MOD_SIMPLE.2: "required" | "optional"
 
 when_block: "when" condition "{" action* "}"
 if_block: "if" condition "{" action* "}" ("else" "if" condition "{" action* "}")* ("else" "{" action* "}")?
@@ -56,7 +72,15 @@ simple_condition: value_ref
                 | "not" simple_condition
                 | special_condition
 
-special_condition: CONFIDENT | UNCERTAIN | SUCCESSFUL | FAILED | CONFIDENCE_BELOW_THRESHOLD
+special_condition: CONFIDENT
+                 | UNCERTAIN
+                 | SUCCESSFUL
+                 | FAILED
+                 | CONFIDENCE_BELOW_THRESHOLD
+                 | slot_condition
+
+slot_condition: "slot" IDENT "is" "missing"     -> slot_is_missing
+              | "all_slots_filled"              -> all_slots_filled
 
 LOGICAL_OP: "and" | "or"
 COMPARATOR: "=" | ">" | "<" | ">=" | "<=" | "!="
@@ -69,6 +93,7 @@ action: conversation_action
       | COMMENT
 
 conversation_action: "ask" "for" "clarification:" text_value            -> ask_clarification
+                   | "prompt" "slot:" text_value                        -> prompt_slot
                    | "respond" "with:" text_value                       -> respond_with
                    | "offer" "choices:" "[" string_list "]"           -> offer_choices
                    | "generate" "response" ("with" "style:" STRING)? -> generate_response

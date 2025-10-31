@@ -33,21 +33,37 @@ class CapabilityClient:
     def _assess_pain(self, payload: dict) -> dict:
         """Mock pain assessment."""
         location = payload.get("location", "unspecified area")
-        level = payload.get("level", "moderate")
+        # Support both 'level' (legacy) and 'severity' (v1.0 slot name)
+        level = payload.get("severity") or payload.get("level", "moderate")
+        onset = payload.get("onset", "unknown")
 
-        # Simple heuristic for urgency
+        # Simple heuristic for urgency based on severity
         try:
-            level_int = int(level)
-            urgency = "high" if level_int >= 8 else "medium"
+            level_int = int(float(level)) if level else 5
+            if level_int >= 8:
+                urgency = "high"
+                wait_time = 5
+                triage_notes = "High priority - immediate assessment required."
+            elif level_int >= 5:
+                urgency = "medium"
+                wait_time = 30
+                triage_notes = "Moderate priority - please wait in triage area."
+            else:
+                urgency = "low"
+                wait_time = 60
+                triage_notes = "Low priority - routine evaluation."
         except (ValueError, TypeError):
             urgency = "high" if "severe" in str(level).lower() else "medium"
+            wait_time = 15
+            triage_notes = "Assessment required."
 
         return {
             "status": "ok",
-            "message": f"Pain assessed in {location}",
+            "message": f"Pain assessed: {location}, severity {level}, onset {onset}",
             "data": {
                 "urgency": urgency,
-                "wait_time": 5 if urgency == "high" else 15
+                "wait_time": wait_time,
+                "triage_notes": triage_notes
             }
         }
 

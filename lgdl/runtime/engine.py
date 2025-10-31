@@ -14,6 +14,7 @@ from .negotiation import NegotiationLoop, NegotiationResult
 from .state import StateManager, Turn
 from .context import ContextEnricher
 from .response_parser import ResponseParser
+from .slots import SlotManager
 from ..errors import RuntimeError as LGDLRuntimeError
 
 def eval_condition(cond: Dict[str, Any], score: float, threshold: float, last_status: str, ctx: Dict[str, Any]) -> bool:
@@ -28,6 +29,11 @@ def eval_condition(cond: Dict[str, Any], score: float, threshold: float, last_st
             return last_status == "ok"
         if cond["special"] == "failed":
             return last_status == "err"
+        # Slot conditions are handled in slot-filling code, not here
+        if cond["special"] == "slot_missing":
+            return False
+        if cond["special"] == "all_slots_filled":
+            return False
     if "op" in cond and cond["op"] in ("and","or"):
         a = eval_condition(cond["left"], score, threshold, last_status, ctx)
         b = eval_condition(cond["right"], score, threshold, last_status, ctx)
@@ -98,6 +104,7 @@ class LGDLRuntime:
         self.state_manager = state_manager
         self.context_enricher = ContextEnricher() if state_manager else None
         self.response_parser = ResponseParser() if state_manager else None
+        self.slot_manager = SlotManager(state_manager) if state_manager else None
 
     async def process_turn(self, conversation_id: str, user_id: str, text: str, context: Dict[str, Any]):
         # Load conversation state if state management is enabled
@@ -116,20 +123,39 @@ class LGDLRuntime:
                 input_for_matching = enriched_result.enriched_input
                 print(f"[Context] Enriched: '{cleaned}' → '{input_for_matching}'")
 
-        # Match against moves using potentially enriched input
-        match = self.matcher.match(input_for_matching, self.compiled)
-        if not match["move"]:
-            return {
-                "move_id": "none",
-                "confidence": 0.0,
-                "response": "Sorry, I didn't catch that.",
-                "action": None,
-                "manifest_id": str(uuid.uuid4()),
-                "firewall_triggered": flagged
-            }
-        mv = match["move"]
-        score = match["score"]
-        params = match["params"]
+        # Check if we're awaiting a slot - if so, route directly to that move
+        mv = None
+        score = 0.0
+        params = {}
+
+        if state and state.awaiting_slot_for_move:
+            # We're in the middle of slot-filling - route to the awaiting move
+            awaiting_move_id = state.awaiting_slot_for_move
+            mv = next((m for m in self.compiled["moves"] if m["id"] == awaiting_move_id), None)
+            if mv:
+                score = 1.0  # Direct route, high confidence
+                params = {}  # Empty params, will fill from user input
+                print(f"[Slot] Routing to awaiting move: {awaiting_move_id}")
+            else:
+                # Move not found, clear state and proceed with normal matching
+                state.awaiting_slot_for_move = None
+                state.awaiting_slot_name = None
+
+        # If not awaiting slot, match against moves using potentially enriched input
+        if not mv:
+            match = self.matcher.match(input_for_matching, self.compiled)
+            if not match["move"]:
+                return {
+                    "move_id": "none",
+                    "confidence": 0.0,
+                    "response": "Sorry, I didn't catch that.",
+                    "action": None,
+                    "manifest_id": str(uuid.uuid4()),
+                    "firewall_triggered": flagged
+                }
+            mv = match["move"]
+            score = match["score"]
+            params = match["params"]
         threshold = mv["threshold"]
         last_status = "ok"
 
@@ -174,13 +200,111 @@ class LGDLRuntime:
                 # E200 errors: log and skip negotiation
                 print(f"[Negotiation] Skipped: {e.message} ({e.code})")
 
+        # Initialize response accumulators (used by both slot and non-slot moves)
         response_acc = ""
         action_out = None
+        last_status = "ok"
+
+        # NEW: Slot-filling logic for multi-turn information gathering
+        if "slots" in mv and self.slot_manager and state:
+            # Determine if we're responding to a specific slot prompt
+            awaiting_specific_slot = state.awaiting_slot_name if state.awaiting_slot_for_move == mv["id"] else None
+
+            # Try to extract slot values from current input
+            for slot_name, slot_def in mv["slots"].items():
+                # Check if slot already filled
+                if not await self.slot_manager.has_slot(conversation_id, mv["id"], slot_name):
+                    value = None
+
+                    # Priority 1: Pattern-captured params
+                    if slot_name in params and params[slot_name] is not None:
+                        value = params[slot_name]
+                        print(f"[Slot] Extracted '{slot_name}' from pattern: {value}")
+
+                    # Priority 2: If we're awaiting THIS specific slot, extract from input
+                    elif awaiting_specific_slot == slot_name:
+                        value = self.slot_manager.extract_slot_from_input(
+                            cleaned,
+                            slot_def["type"],
+                            params
+                        )
+                        if value:
+                            print(f"[Slot] Extracted '{slot_name}' from awaiting input: {value}")
+
+                    # Don't extract from input for other slots - wait for their turn
+
+                    if value is not None:
+                        # Validate the value
+                        is_valid, coerced = self.slot_manager.validate_slot_value(slot_def, value)
+                        if is_valid:
+                            await self.slot_manager.fill_slot(conversation_id, mv["id"], slot_name, coerced, slot_def["type"])
+                            print(f"[Slot] Filled '{slot_name}' = {coerced}")
+                        else:
+                            print(f"[Slot] Validation failed for '{slot_name}': {value}")
+
+            # Check if all required slots are filled
+            if not await self.slot_manager.all_required_filled(mv, conversation_id):
+                # Get the first missing slot and prompt for it
+                missing = await self.slot_manager.get_missing_slots(mv, conversation_id)
+                if missing:
+                    slot_name = missing[0]
+                    # Get the prompt from IR
+                    prompt = mv.get("slot_prompts", {}).get(slot_name, f"Please provide {slot_name}")
+
+                    print(f"[Slot] Missing required slot '{slot_name}', prompting user")
+
+                    # Set awaiting state so next input routes back to this move
+                    if state:
+                        state.awaiting_slot_for_move = mv["id"]
+                        state.awaiting_slot_name = slot_name
+                        await self.state_manager.persistent_storage.save_conversation(state)
+
+                    return {
+                        "move_id": mv["id"],
+                        "confidence": float(score),
+                        "response": prompt,
+                        "action": None,
+                        "awaiting_slot": slot_name,
+                        "manifest_id": str(uuid.uuid4()),
+                        "firewall_triggered": flagged
+                    }
+
+            # All required slots filled - get slot values and add to params
+            slot_values = await self.slot_manager.get_slot_values(mv["id"], conversation_id)
+            params.update(slot_values)
+            print(f"[Slot] All slots filled: {slot_values}")
+
+            # Clear awaiting state since all slots are filled
+            if state:
+                state.awaiting_slot_for_move = None
+                state.awaiting_slot_name = None
+
+            # Execute all_slots_filled actions if defined
+            if "all_slots_filled" in mv.get("slot_conditions", {}):
+                # Execute all_slots_filled actions first
+                for action in mv["slot_conditions"]["all_slots_filled"]:
+                    r, action_out, last_status = await self._exec_action(action, params)
+                    if r:
+                        response_acc += ("" if not response_acc else " ") + r
+
+                # Clear slots after execution
+                await self.slot_manager.clear_slots(conversation_id, mv["id"])
+
+                # DON'T return here - continue to normal blocks
+                # so "when successful" / "when failed" can trigger
+
+        # Normal block execution (continues from slot-filling or starts fresh for non-slot moves)
         branch_executed = False
 
         for blk in mv["blocks"]:
             if branch_executed:
                 break  # SINGLE-BRANCH GUARANTEE
+
+            # Debug: log block evaluation
+            cond = blk.get("condition", {})
+            cond_str = cond.get("special", str(cond)[:50])
+            print(f"[Block] Checking condition: {cond_str}, last_status={last_status}")
+
             if blk["kind"] == "if_chain":
                 for link in blk["chain"]:
                     cond = link["condition"]
@@ -194,11 +318,16 @@ class LGDLRuntime:
                 continue
 
             cond = blk.get("condition")
-            if eval_condition(cond, score, threshold, last_status, params):
+            eval_result = eval_condition(cond, score, threshold, last_status, params)
+            print(f"[Block] Condition '{cond_str}' evaluated to: {eval_result}")
+
+            if eval_result:
+                print(f"[Block] Executing block with {len(blk.get('actions', []))} actions")
                 for act in blk.get("actions", []):
                     r, action_out, last_status = await self._exec_action(act, params)
                     if r:
                         response_acc += ("" if not response_acc else " ") + r
+                        print(f"[Block] Added response: {r[:80]}...")
                 branch_executed = True
 
         if not response_acc:

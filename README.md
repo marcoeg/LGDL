@@ -1,14 +1,15 @@
-# LGDL v1.0 Beta
+# LGDL v1.0
 
 Language-Game Definition Language (LGDL) lets you describe conversational "games"—sets of moves, triggers, and actions—that can be parsed, compiled to an intermediate representation, and executed at runtime.
 
-**v1.0 Beta** adds critical **security**, **scalability**, **determinism**, and **multi-turn conversation** capabilities:
+**v1.0** adds critical **security**, **scalability**, **determinism**, **multi-turn conversation**, and **slot-filling** capabilities:
 
 - 🔒 **Template Security** – AST-based validation preventing RCE (error taxonomy E001-E499)
 - 🎮 **Multi-Game API** – Registry for concurrent games with `/games/{id}/move` endpoints
 - 🎯 **Deterministic Embeddings** – SQLite cache with version locking for reproducible confidence scores
 - 💬 **Multi-Turn Conversations** – State management with SQLite persistence, context enrichment, and <10ms read/write latency
-- 📊 **196 Tests** – Comprehensive coverage including 36 state management tests
+- 🎰 **Slot-Filling** – Declarative information gathering with automatic prompting and type validation
+- 📊 **218 Tests** – Comprehensive coverage including 40 slot-filling tests
 
 > **Migration from MVP v0.1**: See [CHANGELOG.md](CHANGELOG.md) for breaking changes and [docs/MIGRATION_MVP_TO_V1.md](docs/MIGRATION_MVP_TO_V1.md) for the full migration plan.
 
@@ -45,11 +46,34 @@ Deterministic AST-to-IR conversion (`lgdl/parser/ir.py`) with regex-backed trigg
 - **Thread-Safe**: Concurrent conversation access with asyncio locks
 - **Optional**: Disable with `LGDL_STATE_DISABLED=1` for stateless mode
 
+### Slot-Filling (NEW - v1.0)
+- **Declarative Information Gathering**: Define required/optional slots with type constraints
+- **Automatic Prompting**: System prompts for missing required slots progressively
+- **Type Validation**: `string`, `number`, `range(min,max)`, `enum(...)`, `timeframe`, `date`
+- **Pattern Integration**: Slot names as pattern placeholders for automatic extraction
+- **Persistent Storage**: Slots survive process restarts via StateManager
+- **Example**:
+  ```lgdl
+  move pain_assessment {
+    slots {
+      location: string required
+      severity: range(1, 10) required
+    }
+    when slot location is missing {
+      prompt slot: "Where does it hurt?"
+    }
+    when all_slots_filled {
+      respond with: "You have {severity}/10 pain in your {location}."
+    }
+  }
+  ```
+- **Documentation**: See [docs/SLOT_FILLING.md](docs/SLOT_FILLING.md) for full guide
+
 ### Tooling
 - CLI (`lgdl`) for validation, compilation, and serving
 - Example games: medical scheduling, simple greeting
 - Golden dialog testing framework
-- Comprehensive pytest coverage (196 tests)
+- Comprehensive pytest coverage (218 tests)
 
 ---
 
@@ -65,16 +89,21 @@ lgdl/
     negotiation.py # Negotiation state management
     state.py       # Multi-turn conversation state manager (NEW v1.0-beta)
     context.py     # Context enrichment for short utterances (NEW v1.0-beta)
+    slots.py       # Slot-filling manager (NEW v1.0)
     storage/       # Persistent storage backends (NEW v1.0-beta)
-      sqlite.py    # SQLite conversation storage
+      sqlite.py    # SQLite conversation + slot storage
   cli/             # Click-based `lgdl` CLI with serve command
   errors.py        # Error taxonomy (E001-E499)
 examples/medical/  # Sample game + golden dialogs + capability contract
 scripts/           # Golden runner utilities
-tests/             # 196 pytest tests covering all features
+tests/             # 218 pytest tests covering all features
   test_state_manager.py   # 36 state management tests (NEW)
   test_context.py         # Context enrichment tests (NEW)
+  test_slots.py           # 21 slot-filling tests (NEW)
+  test_slot_parsing.py    # 9 slot grammar tests (NEW)
+  test_slot_integration.py # 10 slot integration tests (NEW)
 docs/              # Migration guides, implementation plans
+  SLOT_FILLING.md  # Slot-filling comprehensive guide (NEW)
 CHANGELOG.md       # Full version history
 ```
 

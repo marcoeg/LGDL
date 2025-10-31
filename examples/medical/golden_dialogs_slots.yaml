@@ -1,0 +1,148 @@
+# Golden dialogs for slot-filling (v1.0)
+# Tests multi-turn slot-filling with pain_assessment move
+
+game: medical_scheduling
+version: 1.0.0
+status: working_v1
+
+dialogs:
+  # Progressive slot-filling - user provides one piece of info at a time
+  - name: progressive_pain_assessment
+    description: "User provides pain information progressively across multiple turns"
+    turns:
+      - input: "I'm in pain"
+        expect:
+          move: pain_assessment
+          confidence: ">=0.7"
+          awaiting_slot: location
+          response_contains: ["Where does it hurt"]
+
+      - input: "My chest"
+        expect:
+          move: pain_assessment
+          awaiting_slot: severity
+          response_contains: ["scale of 1-10", "severe"]
+
+      - input: "8"
+        expect:
+          move: pain_assessment
+          awaiting_slot: onset
+          response_contains: ["When did", "start"]
+
+      - input: "An hour ago"
+        expect:
+          move: pain_assessment
+          slots_filled: true
+          response_contains: ["8", "chest", "hour"]
+
+  # Pattern extraction - user provides location upfront
+  - name: pain_with_location_upfront
+    description: "User provides location in initial utterance"
+    turns:
+      - input: "I have pain in my back"
+        expect:
+          move: pain_assessment
+          awaiting_slot: severity
+          response_contains: ["scale", "severe"]
+
+      - input: "6 out of 10"
+        expect:
+          move: pain_assessment
+          awaiting_slot: onset
+          response_contains: ["When", "start"]
+
+      - input: "Started this morning"
+        expect:
+          move: pain_assessment
+          slots_filled: true
+          response_contains: ["6", "back", "morning"]
+
+  # Numeric extraction test
+  - name: pain_with_severity_in_text
+    description: "User provides severity embedded in natural language"
+    turns:
+      - input: "I'm in pain"
+        expect:
+          move: pain_assessment
+          awaiting_slot: location
+
+      - input: "My knee"
+        expect:
+          move: pain_assessment
+          awaiting_slot: severity
+
+      - input: "The pain is about a 7"
+        expect:
+          move: pain_assessment
+          awaiting_slot: onset
+          response_contains: ["When"]
+
+      - input: "2 days ago"
+        expect:
+          move: pain_assessment
+          slots_filled: true
+          response_contains: ["7", "knee", "days"]
+
+  # Timeframe variations
+  - name: pain_with_various_timeframes
+    description: "Test different timeframe expression formats"
+    turns:
+      - input: "Pain in abdomen"
+        expect:
+          move: pain_assessment
+          awaiting_slot: severity
+
+      - input: "5"
+        expect:
+          move: pain_assessment
+          awaiting_slot: onset
+
+      - input: "just now"
+        expect:
+          move: pain_assessment
+          slots_filled: true
+          response_contains: ["5", "abdomen", "just now"]
+
+  # Another timeframe test
+  - name: pain_recent_timeframe
+    description: "Test 'recently' as timeframe"
+    turns:
+      - input: "I'm in pain"
+        expect:
+          move: pain_assessment
+          awaiting_slot: location
+
+      - input: "shoulder"
+        expect:
+          move: pain_assessment
+          awaiting_slot: severity
+
+      - input: "4"
+        expect:
+          move: pain_assessment
+          awaiting_slot: onset
+
+      - input: "started recently"
+        expect:
+          move: pain_assessment
+          slots_filled: true
+
+  # Fast complete - all info in 3 turns
+  - name: pain_quick_complete
+    description: "Complete pain assessment in minimal turns"
+    turns:
+      - input: "ankle hurts"
+        expect:
+          move: pain_assessment
+          awaiting_slot: severity
+
+      - input: "9"
+        expect:
+          move: pain_assessment
+          awaiting_slot: onset
+
+      - input: "a few hours ago"
+        expect:
+          move: pain_assessment
+          slots_filled: true
+          response_contains: ["9", "ankle", "hours"]
