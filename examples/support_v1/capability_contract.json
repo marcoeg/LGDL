@@ -1,0 +1,102 @@
+{
+  "service": "support_v1_platform",
+  "version": "1.0",
+  "description": "Customer support platform integration for authentication, billing, and device management",
+  "capabilities": {
+    "auth": {
+      "description": "Authentication and account management service",
+      "functions": {
+        "verify_user": {
+          "description": "Verify user account exists and is active",
+          "parameters": ["username", "email"],
+          "returns": "user verification status and account details",
+          "timeout_ms": 2000,
+          "notes": "Accepts either username or email for lookup"
+        },
+        "send_reset_link": {
+          "description": "Send password reset link via email or SMS",
+          "parameters": ["email", "username", "channel"],
+          "returns": "confirmation that reset link was sent",
+          "timeout_ms": 2000,
+          "notes": "Channel must be 'email' or 'sms'"
+        },
+        "unlock_account": {
+          "description": "Unlock account that was locked due to failed attempts or suspicious activity",
+          "parameters": ["username"],
+          "returns": "unlock status and any security notes",
+          "timeout_ms": 2000,
+          "notes": "May require additional verification for suspicious activity locks"
+        },
+        "check_2fa_status": {
+          "description": "Check if two-factor authentication is enabled for account",
+          "parameters": ["username"],
+          "returns": "2FA status and available methods",
+          "timeout_ms": 1000
+        }
+      }
+    },
+    "billing": {
+      "description": "Billing and subscription management service",
+      "functions": {
+        "get_invoices": {
+          "description": "Retrieve invoice history for account",
+          "parameters": ["account_id"],
+          "returns": "list of invoices with dates, amounts, and status",
+          "timeout_ms": 3000,
+          "notes": "Returns last 12 months of invoices by default"
+        },
+        "get_plan": {
+          "description": "Get current subscription plan details",
+          "parameters": ["account_id"],
+          "returns": "plan name, price, features, renewal date",
+          "timeout_ms": 2000
+        },
+        "process_refund": {
+          "description": "Process refund request for account",
+          "parameters": ["account_id", "amount", "reason"],
+          "returns": "refund status and processing time",
+          "timeout_ms": 5000,
+          "notes": "Refunds typically process within 5-7 business days"
+        }
+      }
+    },
+    "device": {
+      "description": "Device and platform status checking",
+      "functions": {
+        "check_status": {
+          "description": "Check platform service status for device type",
+          "parameters": ["device_type"],
+          "returns": "service status (operational, degraded, outage) and any known issues",
+          "timeout_ms": 2000,
+          "notes": "Device types: ios, android, web, desktop"
+        },
+        "restart_service": {
+          "description": "Restart backend services for user session",
+          "parameters": ["username", "device_type"],
+          "returns": "restart confirmation and new session ID",
+          "timeout_ms": 3000
+        },
+        "check_connectivity": {
+          "description": "Test network connectivity and API reachability",
+          "parameters": ["device_type", "user_ip"],
+          "returns": "connectivity test results and recommended actions",
+          "timeout_ms": 2000
+        }
+      }
+    }
+  },
+  "pii_fields": [
+    "username",
+    "email",
+    "account_id",
+    "user_ip",
+    "phone_number"
+  ],
+  "security": {
+    "authentication_required": true,
+    "rate_limiting": true,
+    "audit_logging": true,
+    "pci_dss_compliant": false,
+    "gdpr_compliant": true
+  }
+}

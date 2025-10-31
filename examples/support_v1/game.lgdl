@@ -1,0 +1,246 @@
+game support_v1 {
+  description: "Customer support L1 automation with authentication, billing, and device troubleshooting"
+
+  capabilities {
+    auth: ["verify_user", "send_reset_link", "unlock_account", "check_2fa_status"]
+    billing: ["get_invoices", "get_plan", "process_refund"]
+    device: ["check_status", "restart_service", "check_connectivity"]
+  }
+
+  moves {
+    move login_issue {
+      slots {
+        username: string optional
+        email: string optional
+        channel: enum("email", "sms") optional
+      }
+
+      when user says something like: [
+        "I can't log in",
+        "login not working",
+        "can't sign in",
+        "password doesn't work",
+        "login fails",
+        "can't access my account"
+      ]
+      confidence: high
+
+      when slot username is missing {
+        prompt slot: "What's the username or email address on your account?"
+      }
+
+      when slot channel is missing {
+        prompt slot: "How should I send the reset link? Reply with 'email' or 'sms'."
+      }
+
+      when all_slots_filled {
+        respond with: "Let me verify your account and send a reset link via {channel}."
+        auth.verify_user for "account verification" await timeout 2
+      }
+
+      when successful {
+        respond with: "Account verified. Sending password reset link to your {channel}."
+        auth.send_reset_link for "password reset" await timeout 2
+      }
+
+      when failed {
+        respond with: "I couldn't find that account. Please verify the username/email and try again, or contact support at 1-800-SUPPORT."
+      }
+    }
+
+    move password_reset_direct {
+      slots {
+        email: string required
+      }
+
+      when user says something like: [
+        "reset my password",
+        "forgot my password",
+        "password reset",
+        "I need a new password",
+        "send me a password reset"
+      ]
+      confidence: medium
+
+      when slot email is missing {
+        prompt slot: "What's the email address on your account?"
+      }
+
+      when all_slots_filled {
+        respond with: "Sending password reset link to {email}..."
+        auth.send_reset_link for "password reset" await timeout 2
+      }
+
+      when successful {
+        respond with: "Reset link sent to {email}. Check your inbox (and spam folder) in the next few minutes."
+      }
+
+      when failed {
+        respond with: "Unable to send reset link. Please verify the email address or contact support."
+      }
+    }
+
+    move account_locked {
+      slots {
+        username: string required
+        reason: enum("too_many_attempts", "suspicious_activity", "unknown") optional
+      }
+
+      when user says something like: [
+        "my account is locked",
+        "I was locked out",
+        "it says too many attempts",
+        "account suspended",
+        "can't access due to suspicious activity"
+      ]
+      confidence: high
+
+      when slot username is missing {
+        prompt slot: "What's the username for the locked account?"
+      }
+
+      when all_slots_filled {
+        respond with: "I'll unlock the account for {username}..."
+        auth.unlock_account for "account unlock" await timeout 2
+      }
+
+      when successful {
+        respond with: "Your account {username} has been unlocked. You should be able to log in now. If you continue having issues, please reset your password."
+      }
+
+      when failed {
+        respond with: "I couldn't unlock {username} automatically. This may require manual review. I'm escalating to a support agent."
+        escalate to: human_agent
+      }
+    }
+
+    move billing_inquiry {
+      slots {
+        account_id: string required
+        topic: enum("invoice", "plan", "refund") required
+      }
+
+      when user says something like: [
+        "billing issue",
+        "where is my invoice",
+        "what plan am I on",
+        "I want a refund",
+        "charge on my card",
+        "billing question"
+      ]
+      confidence: medium
+
+      when slot account_id is missing {
+        prompt slot: "Can you provide your account ID? It's in your welcome email or account settings."
+      }
+
+      when slot topic is missing {
+        prompt slot: "Is this about an invoice, your plan details, or a refund?"
+      }
+
+      when all_slots_filled {
+        respond with: "Looking up {topic} information for account {account_id}..."
+        billing.get_invoices for "billing lookup" await timeout 3
+      }
+
+      when successful {
+        respond with: "I found your {topic} details for account {account_id}. {invoice_date? Last invoice: invoice_date.} {plan_name? Current plan: plan_name.} How else can I help?"
+      }
+
+      when failed {
+        respond with: "I'm having trouble accessing billing records. Please email billing@example.com with your account ID for assistance."
+      }
+    }
+
+    move device_issue {
+      slots {
+        device_type: enum("ios", "android", "web", "desktop") required
+        error_desc: string optional
+      }
+
+      when user says something like: [
+        "the app is not working",
+        "I get a spinning wheel",
+        "my screen is blank",
+        "I can't connect",
+        "app won't load",
+        "keeps crashing"
+      ]
+      confidence: medium
+
+      when slot device_type is missing {
+        prompt slot: "Which device are you using? Reply with: ios, android, web, or desktop"
+      }
+
+      when slot error_desc is missing {
+        prompt slot: "Can you describe what you see? For example: error message, spinning wheel, blank screen, or crash."
+      }
+
+      when all_slots_filled {
+        respond with: "Checking status for {device_type} app..."
+        device.check_status for "device diagnostics" await timeout 2
+      }
+
+      when successful {
+        respond with: "The {device_type} service is operational. Try these steps: 1) Log out and log back in, 2) Clear app cache, 3) Restart your device. If the problem persists, I'll escalate to our technical team."
+      }
+
+      when failed {
+        respond with: "We're experiencing issues with the {device_type} platform. Our team is working on it. Estimated resolution: {eta? eta}{eta! 30 minutes}."
+      }
+    }
+
+    move plan_change {
+      slots {
+        account_id: string required
+        action: enum("upgrade", "downgrade", "cancel") required
+        new_plan: string optional
+      }
+
+      when user says something like: [
+        "I want to upgrade",
+        "downgrade my plan",
+        "cancel my subscription",
+        "change my plan",
+        "switch to a different plan"
+      ]
+      confidence: medium
+
+      when slot account_id is missing {
+        prompt slot: "What's your account ID?"
+      }
+
+      when slot action is missing {
+        prompt slot: "Would you like to upgrade, downgrade, or cancel?"
+      }
+
+      when all_slots_filled {
+        respond with: "Processing {action} request for account {account_id}{new_plan? to new_plan}..."
+        billing.get_plan for "plan change" await timeout 3
+      }
+
+      when successful {
+        respond with: "Your {action} has been processed. {new_plan? You're now on the new_plan plan.} Changes take effect immediately."
+      }
+    }
+
+    move unclear_support {
+      when user says something like: [
+        "it doesn't work",
+        "I have a problem",
+        "support",
+        "help me",
+        "something is broken"
+      ]
+      confidence: low
+
+      when uncertain {
+        negotiate "I'd like to help! Is this about login/password, billing, or the app not working properly?" until confident
+      }
+
+      when confident {
+        respond with: "Got it. Let me route you to the right place."
+      }
+    }
+  }
+}

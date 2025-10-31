@@ -1,0 +1,47 @@
+{
+  "service": "medical_v2_ehr",
+  "version": "1.0",
+  "description": "Electronic Health Record integration for patient data retrieval",
+  "capabilities": {
+    "ehr": {
+      "description": "Electronic Health Record system integration",
+      "functions": {
+        "fetch_patient": {
+          "description": "Fetch patient demographics and basic information",
+          "parameters": ["patient_id"],
+          "returns": "patient demographics (name, DOB, MRN, primary care provider)",
+          "timeout_ms": 2000,
+          "notes": "Requires patient_id or DOB for lookup"
+        },
+        "fetch_med_list": {
+          "description": "Retrieve current medication list for patient",
+          "parameters": ["patient_id"],
+          "returns": "list of active medications with dosages",
+          "timeout_ms": 3000,
+          "notes": "Includes prescription and OTC medications entered in system"
+        },
+        "fetch_allergies": {
+          "description": "Retrieve patient allergy list",
+          "parameters": ["patient_id"],
+          "returns": "list of known allergies and reactions",
+          "timeout_ms": 2000,
+          "notes": "Critical for medication safety checks"
+        }
+      }
+    }
+  },
+  "pii_fields": [
+    "patient_id",
+    "patient_name",
+    "date_of_birth",
+    "medical_record_number",
+    "medications",
+    "allergies"
+  ],
+  "security": {
+    "hipaa_compliant": true,
+    "encryption_required": true,
+    "audit_logging": true,
+    "phi_protection": true
+  }
+}

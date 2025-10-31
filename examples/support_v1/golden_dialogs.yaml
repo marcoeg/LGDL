@@ -1,0 +1,196 @@
+game: support_v1
+version: 1.0-rc
+status: working
+
+dialogs:
+  # Test 1: Login issue with progressive slot-filling
+  - name: login_missing_email
+    description: "User can't log in, provides email and channel progressively"
+    turns:
+      - input: "I can't log in"
+        expect:
+          move: login_issue
+          confidence: ">=0.8"
+          awaiting_slot: username
+          response_contains: ["username or email"]
+
+      - input: "marco@example.com"
+        expect:
+          move: login_issue
+          awaiting_slot: channel
+          response_contains: ["reset link", "email or sms"]
+
+      - input: "email"
+        expect:
+          move: login_issue
+          response_contains: ["verify", "reset link via email"]
+
+  # Test 2: Password reset direct path
+  - name: password_reset_direct
+    description: "User explicitly requests password reset"
+    turns:
+      - input: "reset my password"
+        expect:
+          move: password_reset_direct
+          confidence: ">=0.5"
+          awaiting_slot: email
+          response_contains: ["email address on your account"]
+
+      - input: "user@corp.com"
+        expect:
+          move: password_reset_direct
+          response_contains: ["Reset link sent to user@corp.com"]
+
+  # Test 3: Account locked scenario
+  - name: account_locked
+    description: "Account locked, user provides username"
+    turns:
+      - input: "my account is locked"
+        expect:
+          move: account_locked
+          confidence: ">=0.8"
+          awaiting_slot: username
+          response_contains: ["username for the locked account"]
+
+      - input: "marco"
+        expect:
+          move: account_locked
+          response_contains: ["unlock", "marco", "log in now"]
+
+  # Test 4: Billing inquiry with topic selection
+  - name: billing_missing_topic
+    description: "Billing question requires account ID and topic"
+    turns:
+      - input: "billing issue"
+        expect:
+          move: billing_inquiry
+          confidence: ">=0.5"
+          awaiting_slot: account_id
+          response_contains: ["account ID"]
+
+      - input: "ACCT-001"
+        expect:
+          move: billing_inquiry
+          awaiting_slot: topic
+          response_contains: ["invoice, your plan details, or a refund"]
+
+      - input: "invoice"
+        expect:
+          move: billing_inquiry
+          response_contains: ["invoice", "ACCT-001"]
+
+  # Test 5: Device issue with platform and error
+  - name: device_issue_spinning_wheel
+    description: "App not working on iOS with spinning wheel"
+    turns:
+      - input: "the app is not working"
+        expect:
+          move: device_issue
+          confidence: ">=0.5"
+          awaiting_slot: device_type
+          response_contains: ["which device", "ios, android, web, or desktop"]
+
+      - input: "ios"
+        expect:
+          move: device_issue
+          awaiting_slot: error_desc
+          response_contains: ["describe what you see"]
+
+      - input: "spinning wheel that never stops"
+        expect:
+          move: device_issue
+          response_contains: ["ios", "Log out and log back in"]
+
+  # Test 6: Unclear support triggers negotiation
+  - name: unclear_negotiate_support
+    description: "Vague support request triggers clarification"
+    turns:
+      - input: "it doesn't work"
+        expect:
+          move: unclear_support
+          confidence: "<0.3"
+          response_contains: ["login/password, billing, or the app"]
+
+      - input: "billing"
+        expect:
+          # Should route to billing_inquiry
+          move: billing_inquiry
+          awaiting_slot: account_id
+          response_contains: ["account ID"]
+
+  # Test 7: Plan change (upgrade)
+  - name: plan_upgrade
+    description: "User wants to upgrade their plan"
+    turns:
+      - input: "I want to upgrade"
+        expect:
+          move: plan_change
+          confidence: ">=0.5"
+          awaiting_slot: account_id
+          response_contains: ["account ID"]
+
+      - input: "ACCT-002"
+        expect:
+          move: plan_change
+          awaiting_slot: action
+          response_contains: ["upgrade, downgrade, or cancel"]
+
+      - input: "upgrade"
+        expect:
+          move: plan_change
+          awaiting_slot: new_plan
+          response_contains: ["which plan"]
+
+      - input: "Pro Plan"
+        expect:
+          move: plan_change
+          response_contains: ["upgrade", "ACCT-002", "Pro Plan"]
+
+  # Test 8: Login with pattern extraction
+  - name: login_with_username_upfront
+    description: "User provides username in initial request"
+    turns:
+      - input: "I can't log in as marco@test.com"
+        expect:
+          move: login_issue
+          awaiting_slot: channel
+          response_contains: ["email or sms"]
+
+      - input: "sms"
+        expect:
+          move: login_issue
+          response_contains: ["reset link via sms"]
+
+  # Test 9: Account locked with reason
+  - name: account_locked_too_many_attempts
+    description: "Account locked due to too many login attempts"
+    turns:
+      - input: "it says too many attempts"
+        expect:
+          move: account_locked
+          confidence: ">=0.8"
+          awaiting_slot: username
+
+      - input: "john_doe"
+        expect:
+          move: account_locked
+          response_contains: ["unlock", "john_doe"]
+
+  # Test 10: Device issue on Android
+  - name: device_android_crash
+    description: "Android app keeps crashing"
+    turns:
+      - input: "app won't load"
+        expect:
+          move: device_issue
+          awaiting_slot: device_type
+
+      - input: "android"
+        expect:
+          move: device_issue
+          awaiting_slot: error_desc
+
+      - input: "it crashes immediately"
+        expect:
+          move: device_issue
+          response_contains: ["android", "Log out"]

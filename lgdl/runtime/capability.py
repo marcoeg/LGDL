@@ -26,6 +26,40 @@ class CapabilityClient:
         elif name == "medical.fever_protocol":
             return self._fever_protocol(payload)
 
+        # EHR capabilities (medical_v2)
+        elif name == "ehr.fetch_patient":
+            return self._fetch_patient(payload)
+        elif name == "ehr.fetch_med_list":
+            return self._fetch_med_list(payload)
+        elif name == "ehr.fetch_allergies":
+            return self._fetch_allergies(payload)
+
+        # Auth capabilities (support_v1)
+        elif name == "auth.verify_user":
+            return self._verify_user(payload)
+        elif name == "auth.send_reset_link":
+            return self._send_reset_link(payload)
+        elif name == "auth.unlock_account":
+            return self._unlock_account(payload)
+        elif name == "auth.check_2fa_status":
+            return self._check_2fa_status(payload)
+
+        # Billing capabilities (support_v1)
+        elif name == "billing.get_invoices":
+            return self._get_invoices(payload)
+        elif name == "billing.get_plan":
+            return self._get_plan(payload)
+        elif name == "billing.process_refund":
+            return self._process_refund(payload)
+
+        # Device capabilities (support_v1)
+        elif name == "device.check_status":
+            return self._check_device_status(payload)
+        elif name == "device.restart_service":
+            return self._restart_service(payload)
+        elif name == "device.check_connectivity":
+            return self._check_connectivity(payload)
+
         # Default appointment system capability
         doctor = payload.get("doctor") or "any provider"
         return {"message": f"Availability for {doctor}: Tue 10:00, Wed 14:00"}
@@ -140,5 +174,237 @@ class CapabilityClient:
             "data": {
                 "temp": temp_value,
                 "wait_time": 10 if temp_value >= 103 else 30
+            }
+        }
+
+    # ========== EHR Capabilities (medical_v2) ==========
+
+    def _fetch_patient(self, payload: dict) -> dict:
+        """Mock patient record fetch from EHR."""
+        patient_id = payload.get("patient_id", "UNKNOWN")
+
+        # Mock patient data
+        return {
+            "status": "ok",
+            "message": f"Patient record retrieved for {patient_id}",
+            "data": {
+                "patient_id": patient_id,
+                "name": "John Doe",
+                "dob": "1980-01-15",
+                "mrn": "MRN-123456",
+                "primary_provider": "Dr. Smith",
+                "insurance": "BlueCross PPO"
+            }
+        }
+
+    def _fetch_med_list(self, payload: dict) -> dict:
+        """Mock medication list retrieval."""
+        patient_id = payload.get("patient_id", "UNKNOWN")
+
+        # Mock medication list
+        return {
+            "status": "ok",
+            "message": f"Medication list for patient {patient_id}",
+            "data": {
+                "medications": [
+                    {"name": "Lisinopril 10mg", "frequency": "once daily"},
+                    {"name": "Metformin 500mg", "frequency": "twice daily"},
+                    {"name": "Aspirin 81mg", "frequency": "once daily"}
+                ],
+                "last_updated": "2025-10-15"
+            }
+        }
+
+    def _fetch_allergies(self, payload: dict) -> dict:
+        """Mock allergy list retrieval."""
+        patient_id = payload.get("patient_id", "UNKNOWN")
+
+        return {
+            "status": "ok",
+            "message": f"Allergy list for patient {patient_id}",
+            "data": {
+                "allergies": [
+                    {"allergen": "Penicillin", "reaction": "Hives"},
+                    {"allergen": "Latex", "reaction": "Contact dermatitis"}
+                ],
+                "no_known_allergies": False
+            }
+        }
+
+    # ========== Auth Capabilities (support_v1) ==========
+
+    def _verify_user(self, payload: dict) -> dict:
+        """Mock user verification."""
+        username = payload.get("username") or payload.get("email", "unknown")
+
+        # Simulate verification (always succeed for demo)
+        return {
+            "status": "ok",
+            "message": f"User {username} verified",
+            "data": {
+                "user_found": True,
+                "account_active": True,
+                "user_id": "USER-" + str(random.randint(1000, 9999))
+            }
+        }
+
+    def _send_reset_link(self, payload: dict) -> dict:
+        """Mock sending password reset link."""
+        username = payload.get("username") or payload.get("email", "unknown")
+        channel = payload.get("channel", "email")
+
+        return {
+            "status": "ok",
+            "message": f"Reset link sent to {username} via {channel}",
+            "data": {
+                "sent_to": username,
+                "channel": channel,
+                "expires_in": "24 hours"
+            }
+        }
+
+    def _unlock_account(self, payload: dict) -> dict:
+        """Mock account unlock."""
+        username = payload.get("username", "unknown")
+
+        # Simulate unlock (success 95% of time)
+        success = random.random() < 0.95
+
+        if success:
+            return {
+                "status": "ok",
+                "message": f"Account {username} unlocked",
+                "data": {
+                    "unlocked": True,
+                    "security_note": "Password change recommended"
+                }
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Unable to unlock {username} - manual review required",
+                "data": {"unlocked": False}
+            }
+
+    def _check_2fa_status(self, payload: dict) -> dict:
+        """Mock 2FA status check."""
+        username = payload.get("username", "unknown")
+
+        return {
+            "status": "ok",
+            "message": f"2FA status for {username}",
+            "data": {
+                "enabled": random.choice([True, False]),
+                "methods": ["sms", "authenticator_app"]
+            }
+        }
+
+    # ========== Billing Capabilities (support_v1) ==========
+
+    def _get_invoices(self, payload: dict) -> dict:
+        """Mock invoice retrieval."""
+        account_id = payload.get("account_id", "UNKNOWN")
+
+        return {
+            "status": "ok",
+            "message": f"Invoices for account {account_id}",
+            "data": {
+                "invoices": [
+                    {"date": "2025-10-01", "amount": "$29.99", "status": "paid"},
+                    {"date": "2025-09-01", "amount": "$29.99", "status": "paid"},
+                    {"date": "2025-08-01", "amount": "$29.99", "status": "paid"}
+                ],
+                "invoice_date": "2025-10-01",
+                "invoice_amount": "$29.99"
+            }
+        }
+
+    def _get_plan(self, payload: dict) -> dict:
+        """Mock plan details retrieval."""
+        account_id = payload.get("account_id", "UNKNOWN")
+
+        return {
+            "status": "ok",
+            "message": f"Plan details for account {account_id}",
+            "data": {
+                "plan_name": "Pro Plan",
+                "price": "$29.99/month",
+                "renewal_date": "2025-11-15",
+                "features": ["Unlimited storage", "Priority support", "Advanced analytics"]
+            }
+        }
+
+    def _process_refund(self, payload: dict) -> dict:
+        """Mock refund processing."""
+        account_id = payload.get("account_id", "UNKNOWN")
+        amount = payload.get("amount", "$29.99")
+
+        return {
+            "status": "ok",
+            "message": f"Refund processed for account {account_id}",
+            "data": {
+                "refund_amount": amount,
+                "processing_time": "5-7 business days",
+                "refund_id": "REF-" + str(random.randint(10000, 99999))
+            }
+        }
+
+    # ========== Device Capabilities (support_v1) ==========
+
+    def _check_device_status(self, payload: dict) -> dict:
+        """Mock platform status check."""
+        device_type = payload.get("device_type", "unknown")
+
+        # Simulate occasional platform issues
+        operational = random.random() < 0.9
+
+        if operational:
+            return {
+                "status": "ok",
+                "message": f"{device_type} platform operational",
+                "data": {
+                    "platform_status": "operational",
+                    "known_issues": []
+                }
+            }
+        else:
+            return {
+                "status": "ok",
+                "message": f"{device_type} platform experiencing issues",
+                "data": {
+                    "platform_status": "degraded",
+                    "known_issues": ["Slow loading times"],
+                    "eta": "30 minutes"
+                }
+            }
+
+    def _restart_service(self, payload: dict) -> dict:
+        """Mock service restart for user session."""
+        username = payload.get("username", "unknown")
+        device_type = payload.get("device_type", "unknown")
+
+        return {
+            "status": "ok",
+            "message": f"Restarted session for {username} on {device_type}",
+            "data": {
+                "session_id": "SESSION-" + str(random.randint(10000, 99999)),
+                "restart_time": "2025-10-31T12:00:00Z"
+            }
+        }
+
+    def _check_connectivity(self, payload: dict) -> dict:
+        """Mock connectivity test."""
+        device_type = payload.get("device_type", "unknown")
+
+        # Simulate connectivity check
+        connected = random.random() < 0.95
+
+        return {
+            "status": "ok",
+            "message": f"Connectivity test for {device_type}",
+            "data": {
+                "connected": connected,
+                "latency_ms": random.randint(50, 200) if connected else None,
+                "recommendation": "Connection stable" if connected else "Check network settings"
             }
         }

@@ -1,0 +1,220 @@
+game medical_v2 {
+  description: "Advanced medical stress triage with slot-filling and EHR integration"
+
+  capabilities {
+    ehr: ["fetch_patient", "fetch_med_list", "fetch_allergies"]
+  }
+
+  moves {
+    move pain_assessment {
+      slots {
+        location: string required
+        severity: range(1, 10) required
+        onset: timeframe required
+        associated_symptoms: string optional
+      }
+
+      when user says something like: [
+        "I have pain",
+        "it hurts",
+        "pain in my {location}",
+        "I'm hurting",
+        "{location} hurts",
+        "hurting in my {location}"
+      ]
+      confidence: medium
+
+      when slot location is missing {
+        prompt slot: "Where exactly is the pain located?"
+      }
+
+      when slot severity is missing {
+        prompt slot: "On a scale from 1 to 10, how severe is the pain?"
+      }
+
+      when slot onset is missing {
+        prompt slot: "When did this pain start?"
+      }
+
+      when all_slots_filled {
+        respond with: "Thank you. You reported {severity}/10 pain in your {location} that started {onset}. Based on your symptoms, I recommend monitoring this. If pain worsens or new symptoms develop, seek immediate care."
+      }
+    }
+
+    move chest_pain_risk {
+      when user says something like: [
+        "chest pain" (strict),
+        "pain in chest" (strict),
+        "pain in my chest",
+        "pressure on my chest",
+        "pressure in chest",
+        "my chest hurts"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "Chest pain can be serious. I need to check a few important things about your symptoms right away."
+        delegate to: chest_pain_followup
+      }
+    }
+
+    move chest_pain_followup {
+      slots {
+        shortness_of_breath: enum("yes", "no") required
+        nausea: enum("yes", "no") optional
+        sweating: enum("yes", "no") optional
+        radiating_pain: enum("yes", "no") optional
+      }
+
+      when user says something like: [
+        "follow up on chest pain",
+        "chest pain questions",
+        "yes",
+        "no",
+        "{shortness_of_breath}"
+      ]
+      confidence: low
+
+      when slot shortness_of_breath is missing {
+        prompt slot: "Are you short of breath right now? (yes/no)"
+      }
+
+      when slot nausea is missing {
+        prompt slot: "Are you also feeling nauseous or vomiting? (yes/no)"
+      }
+
+      when slot sweating is missing {
+        prompt slot: "Are you sweating or feeling cold and clammy? (yes/no)"
+      }
+
+      when slot radiating_pain is missing {
+        prompt slot: "Does the pain radiate to your arm, jaw, or back? (yes/no)"
+      }
+
+      when all_slots_filled {
+        respond with: "Based on your chest pain symptoms - shortness of breath: {shortness_of_breath}, nausea: {nausea}, sweating: {sweating}, radiating pain: {radiating_pain}. If you're experiencing severe symptoms, please call 911 or go to the nearest emergency room immediately. If symptoms are mild, monitor closely and seek evaluation if they worsen."
+      }
+    }
+
+    move breathing_difficulty {
+      slots {
+        duration: timeframe required
+        exertional: enum("at rest", "when walking", "when exercising") optional
+        cough: enum("yes", "no") optional
+        fever: enum("yes", "no") optional
+      }
+
+      when user says something like: [
+        "I can't breathe" (strict),
+        "short of breath",
+        "breathing is hard",
+        "I feel winded",
+        "difficulty breathing",
+        "can't catch my breath"
+      ]
+      confidence: high
+
+      when slot duration is missing {
+        prompt slot: "How long have you been short of breath?"
+      }
+
+      when slot exertional is missing {
+        prompt slot: "Does it happen at rest, when walking, or only when exercising?"
+      }
+
+      when slot cough is missing {
+        prompt slot: "Do you also have a cough? (yes/no)"
+      }
+
+      when all_slots_filled {
+        respond with: "I understand. You've been short of breath for {duration}, happening {exertional? when exertional}{cough? with cough}. Difficulty breathing requires evaluation. If you're struggling to breathe or have chest pain, seek emergency care. Otherwise, schedule an urgent appointment."
+      }
+    }
+
+    move medication_check {
+      slots {
+        patient_id: string optional
+        query_type: enum("medications", "allergies", "both") optional
+      }
+
+      when user says something like: [
+        "what meds am I on",
+        "can you check my medication",
+        "do I have any allergies recorded",
+        "check my allergies",
+        "what medications do I take",
+        "my medication list"
+      ]
+      confidence: medium
+
+      when slot patient_id is missing {
+        prompt slot: "What's your patient ID or date of birth for verification?"
+      }
+
+      when slot query_type is missing {
+        prompt slot: "Would you like to check medications, allergies, or both?"
+      }
+
+      when all_slots_filled {
+        respond with: "Let me pull up your {query_type} from the system..."
+        ehr.fetch_patient for "patient lookup" await timeout 2
+      }
+
+      when successful {
+        respond with: "I found your records. Your current {query_type} are listed in the system. Please review with your provider during your next visit."
+      }
+
+      when failed {
+        respond with: "I'm having trouble accessing the records system. Please call the clinic directly at 555-1234 for medication information."
+      }
+    }
+
+    move fever_check {
+      slots {
+        temperature: range(95, 106) optional
+        duration: timeframe required
+        other_symptoms: string optional
+      }
+
+      when user says something like: [
+        "I have a fever",
+        "I'm running a fever",
+        "my temperature is {temperature}",
+        "temp is {temperature}",
+        "fever of {temperature}"
+      ]
+      confidence: medium
+
+      when slot duration is missing {
+        prompt slot: "How long have you had the fever?"
+      }
+
+      when slot temperature is missing {
+        prompt slot: "What's your current temperature if you've measured it? (in Fahrenheit)"
+      }
+
+      when all_slots_filled {
+        respond with: "You've had a fever{temperature? of temperature°F} for {duration}. For fever over 103°F or lasting more than 3 days, please seek evaluation. Stay hydrated and monitor your symptoms."
+      }
+    }
+
+    move unclear_complaint {
+      when user says something like: [
+        "I don't feel good",
+        "something is wrong",
+        "I feel bad",
+        "I'm not well",
+        "I'm sick"
+      ]
+      confidence: low
+
+      when uncertain {
+        negotiate "Can you tell me where in your body you feel this most? Or describe your main symptom?" until confident
+      }
+
+      when confident {
+        respond with: "Thank you for clarifying. Let me help you with that."
+      }
+    }
+  }
+}

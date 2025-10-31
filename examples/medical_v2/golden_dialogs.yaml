@@ -1,0 +1,206 @@
+game: medical_v2
+version: 1.0-rc
+status: working
+
+dialogs:
+  # Test 1: Basic pain assessment - progressive slot-filling
+  - name: basic_pain_assessment
+    description: "User provides pain information progressively across 4 turns"
+    turns:
+      - input: "I have pain"
+        expect:
+          move: pain_assessment
+          confidence: ">=0.5"
+          awaiting_slot: location
+          response_contains: ["Where exactly is the pain"]
+
+      - input: "in my lower back"
+        expect:
+          move: pain_assessment
+          awaiting_slot: severity
+          response_contains: ["scale from 1 to 10", "severe"]
+
+      - input: "7"
+        expect:
+          move: pain_assessment
+          awaiting_slot: onset
+          response_contains: ["When did this pain start"]
+
+      - input: "since yesterday"
+        expect:
+          move: pain_assessment
+          response_contains: ["7/10 pain", "lower back", "yesterday"]
+          response_contains: ["monitor this"]
+
+  # Test 2: Chest pain high-risk pathway
+  - name: chest_pain_high_risk
+    description: "Chest pain triggers specialized high-risk assessment flow"
+    turns:
+      - input: "I have chest pain"
+        expect:
+          move: chest_pain_risk
+          confidence: ">=0.8"
+          response_contains: ["serious", "check a few"]
+
+      - input: "yes"
+        expect:
+          move: chest_pain_followup
+          awaiting_slot: shortness_of_breath
+          response_contains: ["short of breath"]
+
+      - input: "yes"
+        expect:
+          move: chest_pain_followup
+          awaiting_slot: nausea
+          response_contains: ["nauseous", "vomiting"]
+
+      - input: "no"
+        expect:
+          move: chest_pain_followup
+          awaiting_slot: sweating
+          response_contains: ["sweating", "cold"]
+
+      - input: "yes"
+        expect:
+          move: chest_pain_followup
+          awaiting_slot: radiating_pain
+          response_contains: ["radiate", "arm", "jaw", "back"]
+
+      - input: "no"
+        expect:
+          move: chest_pain_followup
+          response_contains: ["shortness of breath: yes", "nausea: no", "sweating: yes"]
+          response_contains: ["911", "emergency room"]
+
+  # Test 3: Breathing difficulty with optional slots
+  - name: breathing_difficulty_short
+    description: "Breathing complaint with minimal required slots"
+    turns:
+      - input: "short of breath"
+        expect:
+          move: breathing_difficulty
+          confidence: ">=0.8"
+          awaiting_slot: duration
+          response_contains: ["How long"]
+
+      - input: "2 hours"
+        expect:
+          move: breathing_difficulty
+          awaiting_slot: exertional
+          response_contains: ["at rest", "walking", "exercising"]
+
+      - input: "at rest"
+        expect:
+          move: breathing_difficulty
+          awaiting_slot: cough
+          response_contains: ["cough"]
+
+      - input: "no"
+        expect:
+          move: breathing_difficulty
+          response_contains: ["short of breath for 2 hours", "at rest"]
+          response_contains: ["requires evaluation"]
+
+  # Test 4: Medication check with capability
+  - name: medication_check_with_capability
+    description: "User checks medications, triggers EHR capability call"
+    turns:
+      - input: "what meds am I on"
+        expect:
+          move: medication_check
+          confidence: ">=0.5"
+          awaiting_slot: patient_id
+          response_contains: ["patient ID", "date of birth"]
+
+      - input: "DOB 01/15/1980"
+        expect:
+          move: medication_check
+          awaiting_slot: query_type
+          response_contains: ["medications, allergies, or both"]
+
+      - input: "medications"
+        expect:
+          move: medication_check
+          response_contains: ["pull up your medications"]
+
+  # Test 5: Fever with temperature extraction
+  - name: fever_with_temperature
+    description: "Fever assessment with numeric temperature extraction"
+    turns:
+      - input: "I have a fever"
+        expect:
+          move: fever_check
+          confidence: ">=0.5"
+          awaiting_slot: duration
+          response_contains: ["How long"]
+
+      - input: "since this morning"
+        expect:
+          move: fever_check
+          awaiting_slot: temperature
+          response_contains: ["current temperature", "Fahrenheit"]
+
+      - input: "101.5"
+        expect:
+          move: fever_check
+          response_contains: ["fever", "101.5", "this morning"]
+
+  # Test 6: Unclear complaint triggers negotiation
+  - name: unclear_negotiate
+    description: "Vague complaint triggers negotiation loop"
+    turns:
+      - input: "I don't feel good"
+        expect:
+          move: unclear_complaint
+          confidence: "<0.3"
+          response_contains: ["where in your body", "main symptom"]
+
+      - input: "my stomach hurts"
+        expect:
+          # Should re-match or route to pain_assessment
+          response_contains: ["pain", "scale"]
+
+  # Test 7: Pain with pattern extraction
+  - name: pain_with_location_upfront
+    description: "User provides location in initial utterance via pattern"
+    turns:
+      - input: "pain in my knee"
+        expect:
+          move: pain_assessment
+          awaiting_slot: severity
+          response_contains: ["scale from 1 to 10"]
+
+      - input: "6"
+        expect:
+          move: pain_assessment
+          awaiting_slot: onset
+          response_contains: ["When did"]
+
+      - input: "started 3 days ago"
+        expect:
+          move: pain_assessment
+          response_contains: ["6/10 pain", "knee", "3 days"]
+
+  # Test 8: Breathing at exertion (tests enum selection)
+  - name: breathing_when_walking
+    description: "Breathing difficulty only when walking"
+    turns:
+      - input: "I feel winded"
+        expect:
+          move: breathing_difficulty
+          awaiting_slot: duration
+
+      - input: "about a week"
+        expect:
+          move: breathing_difficulty
+          awaiting_slot: exertional
+
+      - input: "when walking"
+        expect:
+          move: breathing_difficulty
+          awaiting_slot: cough
+
+      - input: "yes"
+        expect:
+          move: breathing_difficulty
+          response_contains: ["week", "when walking", "cough"]
