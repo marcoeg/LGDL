@@ -15,7 +15,8 @@ dependencies = [
   "lark>=1.1,<2",
   "jsonschema>=4.22,<5",
   "click>=8.1,<9",
-  "numpy>=1.26,<3"
+  "numpy>=1.26,<3",
+  "aiosqlite>=0.19,<1"
 ]
 
 [project.optional-dependencies]
