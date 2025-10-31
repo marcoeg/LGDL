@@ -10,23 +10,30 @@ game support_v1 {
   moves {
     move login_issue {
       slots {
-        username: string optional
-        email: string optional
-        channel: enum("email", "sms") optional
+        email: string required
+        channel: enum("email", "sms") required
       }
 
       when user says something like: [
         "I can't log in",
+        "I cannot log in",
+        "I can't login",
+        "I cannot login",
+        "I cant log in",
+        "I cant login",
         "login not working",
         "can't sign in",
+        "cannot sign in",
         "password doesn't work",
+        "password does not work",
         "login fails",
-        "can't access my account"
+        "can't access my account",
+        "cannot access my account"
       ]
       confidence: high
 
-      when slot username is missing {
-        prompt slot: "What's the username or email address on your account?"
+      when slot email is missing {
+        prompt slot: "What's the email address on your account?"
       }
 
       when slot channel is missing {
@@ -155,7 +162,7 @@ game support_v1 {
     move device_issue {
       slots {
         device_type: enum("ios", "android", "web", "desktop") required
-        error_desc: string optional
+        error_desc: string required
       }
 
       when user says something like: [
