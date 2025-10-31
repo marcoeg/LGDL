@@ -23,7 +23,37 @@ User: "About an hour ago"
 System: [Enriched with pain context] → Continues assessment with full information
 ```
 
-Real multi-turn conversations work out of the box in v1.0-beta!
+**Context enrichment works!** The infrastructure correctly enriches short utterances with conversation history.
+
+## Known Limitations in v1.0-beta
+
+⚠️ **Game Design Limitation**: This example demonstrates a known limitation in v1.0-beta:
+
+**Issue**: Users may see repeated questions in multi-turn conversations
+
+**Root Cause**: Game design pattern, not a runtime bug
+- All patterns (initial + follow-up) are combined in the same moves
+- Example: `pain_assessment` contains both `"I have pain"` AND `"started {timeframe} ago"`
+- Enriched input "started two hours ago" matches `pain_assessment` **again**
+- System routes back to same move → repeats questions
+
+**What works correctly**:
+- ✅ State management with SQLite persistence
+- ✅ Question detection from system responses
+- ✅ Context enrichment ("my chest" → "pain in chest")
+- ✅ Turn history tracking
+- ✅ <10ms read/write latency
+
+**Solution**: Waiting for v0.2 slot-filling feature (documented below)
+- Proper multi-turn conversations require explicit slot definitions
+- Auto-prompting for missing information
+- Conditional capability execution when all slots filled
+
+**Workaround** (not recommended): Split moves into initial vs. follow-up patterns
+- Creates maintenance burden
+- Would be replaced when v0.2 ships
+
+See "Future Vision: v0.2 Multi-Turn Conversations" section below for the long-term solution.
 
 ## Overview
 

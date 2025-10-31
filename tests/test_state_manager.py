@@ -22,9 +22,9 @@ from lgdl.runtime.storage.sqlite import SQLiteStateStorage
 
 
 @pytest.fixture
-async def temp_db():
-    """Create temporary database for testing"""
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as f:
+def temp_db():
+    """Create temporary database for testing in /tmp"""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".db", dir="/tmp") as f:
         db_path = f.name
 
     yield db_path

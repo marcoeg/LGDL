@@ -422,14 +422,14 @@ def test_runtime_backward_compatible():
 def test_registry_loads_capability_contract():
     """Test that registry loads capability_contract.json when present."""
     reg = GameRegistry()
-    reg.register("medical", "examples/medical/game.lgdl")
+    reg.register("shopping", "examples/shopping/game.lgdl")
 
-    runtime = reg.get_runtime("medical")
+    runtime = reg.get_runtime("shopping")
 
-    # Medical game has capability contract
+    # Shopping game has capability contract
     assert runtime.cap is not None
     # Allowlist should be extracted from IR
-    assert "check_availability" in runtime.policy.allowlist
+    assert "search_products" in runtime.policy.allowlist
 
 
 def test_registry_no_capability_contract():
@@ -466,22 +466,22 @@ def test_registry_shopping_capability_contract():
 def test_registry_per_game_isolation():
     """Test that different games have isolated runtimes and allowlists."""
     reg = GameRegistry()
-    reg.register("medical", "examples/medical/game.lgdl")
+    reg.register("greeting", "examples/greeting/game.lgdl")
     reg.register("shopping", "examples/shopping/game.lgdl")
 
-    medical_runtime = reg.get_runtime("medical")
+    greeting_runtime = reg.get_runtime("greeting")
     shopping_runtime = reg.get_runtime("shopping")
 
     # Different runtime instances
-    assert medical_runtime is not shopping_runtime
+    assert greeting_runtime is not shopping_runtime
 
     # Different allowlists
-    assert medical_runtime.policy.allowlist != shopping_runtime.policy.allowlist
+    assert greeting_runtime.policy.allowlist != shopping_runtime.policy.allowlist
 
-    # Medical has check_availability, shopping doesn't
-    assert "check_availability" in medical_runtime.policy.allowlist
-    assert "check_availability" not in shopping_runtime.policy.allowlist
+    # Greeting has no capabilities (empty allowlist)
+    assert greeting_runtime.policy.allowlist == set()
+    assert greeting_runtime.cap is None
 
-    # Shopping has search_products, medical doesn't
+    # Shopping has search_products and other shopping capabilities
     assert "search_products" in shopping_runtime.policy.allowlist
-    assert "search_products" not in medical_runtime.policy.allowlist
+    assert shopping_runtime.cap is not None

@@ -307,29 +307,74 @@ class LGDLRuntime:
         """
         Prompt user for clarification during negotiation.
 
-        If state management is enabled, marks conversation as awaiting response.
-        In production, this would send message via async channel and await response.
-        For tests, mock this method using unittest.mock.patch.
+        IMPORTANT: This method cannot be fully implemented in v1.0-beta because
+        the current request/response model doesn't support mid-request user interaction.
+
+        Full implementation requires one of:
+        - WebSocket connection for real-time bidirectional communication
+        - Async message queue (Redis pub/sub, RabbitMQ, etc.)
+        - Polling mechanism with session state
+
+        Current behavior:
+        - In TEST_MODE (env LGDL_TEST_MODE=1): Auto-selects first option
+        - Otherwise: Marks conversation as awaiting_response and raises NotImplementedError
 
         Args:
             conversation_id: Conversation identifier
-            question: Clarification question
-            options: List of suggested options
+            question: Clarification question to ask user
+            options: List of suggested options (if available)
 
         Returns:
-            User's response
+            User's response (in test mode, returns first option)
 
         Raises:
-            NotImplementedError: Always (stub implementation)
+            NotImplementedError: In production mode (requires async infrastructure)
+
+        Example production integration:
+            ```python
+            # Publish question to message queue
+            await self.message_queue.publish(conversation_id, {
+                "type": "clarification_request",
+                "question": question,
+                "options": options
+            })
+
+            # Wait for user response (with timeout)
+            response = await self.message_queue.wait_for_response(
+                conversation_id,
+                timeout=30.0
+            )
+
+            return response["text"]
+            ```
+
+        For testing, use unittest.mock.patch:
+            ```python
+            with patch.object(engine, '_prompt_user', return_value="option1"):
+                result = await engine.process(...)
+            ```
         """
+        import os
+
         # Mark conversation as awaiting response if state management enabled
         if self.state_manager:
             await self.state_manager.set_awaiting_response(conversation_id, question)
             print(f"[Negotiation] Awaiting user response to: {question}")
+            if options:
+                print(f"[Negotiation] Options: {', '.join(options)}")
 
+        # Test mode: auto-select first option for automated testing
+        test_mode = os.getenv("LGDL_TEST_MODE", "0") == "1"
+        if test_mode and options:
+            selected = options[0]
+            print(f"[Negotiation] TEST_MODE: Auto-selected '{selected}'")
+            return selected
+
+        # Production mode: requires async messaging infrastructure
         raise NotImplementedError(
-            "User prompting not implemented in MVP. "
-            "Mock this method in tests with unittest.mock.patch."
+            "User prompting requires async messaging infrastructure (WebSocket, "
+            "message queue, or polling). Set LGDL_TEST_MODE=1 to auto-select first "
+            "option for testing, or mock this method with unittest.mock.patch."
         )
 
     def _negotiation_to_manifest(self, result: NegotiationResult) -> dict:
