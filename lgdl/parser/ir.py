@@ -21,7 +21,19 @@ def compile_game(game: Game) -> Dict[str, Any]:
     moves = []
     for mv in game.moves:
         moves.append(compile_move(mv))
-    return {"name": game.name, "moves": moves, "capabilities": []}
+
+    # Compile vocabulary to Dict[str, List[str]] for runtime matching
+    vocabulary = {}
+    for entry in game.vocabulary:
+        vocabulary[entry.term] = entry.synonyms
+
+    return {
+        "name": game.name,
+        "description": game.description or "",  # Phase 1: context for LLM prompts
+        "vocabulary": vocabulary,  # Phase 1: context-aware matching
+        "moves": moves,
+        "capabilities": []
+    }
 
 def compile_move(mv: Move) -> Dict[str, Any]:
     trigz = []

@@ -240,3 +240,429 @@ class TwoStageMatcher:
             if not best or score > best["score"]:
                 best = {"move": mv, "score": score, "params": params}
         return best or {"move": None, "score": 0.0, "params": {}}
+
+
+# ============================================================================
+# Phase 1: Context-Aware Semantic Matching
+# ============================================================================
+
+class LLMSemanticMatcher:
+    """Context-aware LLM semantic matcher using game vocabulary.
+
+    This matcher uses an LLM to perform semantic matching with rich context including:
+    - Game vocabulary (synonyms and domain-specific terms)
+    - Conversation history (multi-turn context)
+    - Successful patterns (learning from what works)
+
+    Unlike embedding-based matching, this understands domain-specific slang
+    and contextual meaning. For example, "my ticker hurts" matches "pain in {location}"
+    because the vocabulary defines "heart" → ["ticker", "chest"].
+
+    Cost: ~$0.01 per match (100 tokens @ gpt-4o-mini)
+    Latency: ~200ms per match
+    """
+
+    def __init__(self, llm_client):
+        """Initialize LLM semantic matcher.
+
+        Args:
+            llm_client: LLMClient instance for completions
+        """
+        self.llm = llm_client
+
+    async def match(
+        self,
+        text: str,
+        pattern: str,
+        context: "MatchingContext"
+    ) -> Dict[str, Any]:
+        """Match text against pattern using LLM with context.
+
+        Args:
+            text: User input text
+            pattern: Pattern to match against
+            context: Rich matching context (vocabulary, history, etc.)
+
+        Returns:
+            Dict with confidence, reasoning, and metadata
+        """
+        # Build context-rich prompt
+        prompt = self._build_prompt(text, pattern, context)
+
+        # Call LLM with structured output
+        try:
+            result = await self.llm.complete(
+                prompt=prompt,
+                response_schema={
+                    "confidence": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0,
+                        "description": "How well user input matches pattern"
+                    },
+                    "reasoning": {
+                        "type": "string",
+                        "description": "Brief explanation (1-2 sentences)"
+                    }
+                },
+                max_tokens=100,
+                temperature=0.0
+            )
+
+            return {
+                "confidence": result.content.get("confidence", 0.0),
+                "reasoning": result.content.get("reasoning", ""),
+                "cost": result.cost,
+                "stage": "llm_semantic"
+            }
+
+        except Exception as e:
+            # Fallback to low confidence on error
+            return {
+                "confidence": 0.0,
+                "reasoning": f"LLM error: {str(e)}",
+                "cost": 0.0,
+                "stage": "llm_semantic_error"
+            }
+
+    def _build_prompt(
+        self,
+        text: str,
+        pattern: str,
+        context: "MatchingContext"
+    ) -> str:
+        """Build context-rich prompt for LLM matching.
+
+        Args:
+            text: User input
+            pattern: Pattern to match
+            context: Matching context
+
+        Returns:
+            Formatted prompt string
+        """
+        sections = []
+
+        # Game context
+        sections.append(f'You are evaluating pattern matching for "{context.game_name}".')
+        if context.game_description:
+            sections.append(f"Game purpose: {context.game_description}")
+
+        # Vocabulary context (only relevant terms)
+        relevant_vocab = context.get_relevant_vocabulary(text)
+        if relevant_vocab:
+            sections.append("\nVocabulary:")
+            for term, synonyms in relevant_vocab.items():
+                sections.append(f"  - '{term}' also means: {', '.join(synonyms)}")
+
+        # Conversation history
+        if context.has_history():
+            sections.append("\nRecent conversation:")
+            for turn in context.get_recent_history(max_turns=3):
+                role = turn["role"]
+                content = turn["content"][:100]  # Limit length
+                sections.append(f"  {role}: {content}")
+
+        # Successful patterns
+        if context.successful_patterns:
+            sections.append("\nRecently successful patterns:")
+            for pat in context.successful_patterns[-3:]:
+                sections.append(f"  - \"{pat}\"")
+
+        # The matching task
+        sections.append(f'\nPattern: "{pattern}"')
+        sections.append(f'User said: "{text}"')
+
+        sections.append("\nRate how well the user's input matches the pattern (0.0-1.0).")
+        sections.append("Consider:")
+        sections.append("1. Semantic similarity (do they mean the same thing?)")
+        sections.append("2. Vocabulary mappings (synonyms and related terms)")
+        sections.append("3. Conversation context (what makes sense given history?)")
+
+        sections.append("\nConfidence scale:")
+        sections.append("- 0.0-0.3: Very different meaning")
+        sections.append("- 0.3-0.5: Related but not matching")
+        sections.append("- 0.5-0.7: Likely match with ambiguity")
+        sections.append("- 0.7-0.9: Strong match with variation")
+        sections.append("- 0.9-1.0: Essentially same meaning")
+
+        return "\n".join(sections)
+
+
+class CascadeMatcher:
+    """Cascade matcher orchestrating lexical → embedding → LLM stages.
+
+    Cost optimization strategy:
+    1. Lexical (regex): Free, <1ms - exact matches
+    2. Embedding: ~$0.0001, 2ms - semantic similarity (cached)
+    3. LLM Semantic: ~$0.01, 200ms - context-aware understanding
+
+    Stops at first confident-enough stage to minimize cost and latency.
+
+    Expected distribution:
+    - ~45% stop at lexical (exact matches)
+    - ~40% stop at embedding (similar matches)
+    - ~15% need LLM (complex cases with vocabulary/context)
+
+    Average cost: ~$0.0015/turn (vs $0.01 if always using LLM)
+    """
+
+    def __init__(self, config):
+        """Initialize cascade matcher.
+
+        Args:
+            config: LGDLConfig with thresholds and feature flags
+
+        Raises:
+            ValueError: If LLM semantic matching enabled but no API key
+            ImportError: If LLM enabled but OpenAI package not installed
+        """
+        self.config = config
+        self.emb = EmbeddingClient()
+
+        # Initialize LLM matcher if enabled
+        if config.enable_llm_semantic_matching:
+            # Fail explicitly if no API key (no silent fallback)
+            if not config.openai_api_key:
+                raise ValueError(
+                    "LLM semantic matching enabled but OPENAI_API_KEY not set. "
+                    "Either set the API key or disable with LGDL_ENABLE_LLM_SEMANTIC_MATCHING=false"
+                )
+
+            from .llm_client import create_llm_client
+
+            # This will raise if package not available (strict mode)
+            llm_client = create_llm_client(
+                api_key=config.openai_api_key,
+                model=config.openai_llm_model,
+                allow_mock_fallback=False  # Fail explicitly, no guessing
+            )
+            self.llm_matcher = LLMSemanticMatcher(llm_client)
+
+            print(f"[LLM] Context-aware semantic matching ENABLED")
+            print(f"[LLM] Model: {config.openai_llm_model}")
+            print(f"[LLM] Lexical threshold: {config.cascade_lexical_threshold}")
+            print(f"[LLM] Embedding threshold: {config.cascade_embedding_threshold}")
+        else:
+            self.llm_matcher = None
+            print("[LLM] Context-aware semantic matching DISABLED (using embeddings only)")
+
+    def _lexical_match(
+        self,
+        text: str,
+        move: Dict[str, Any]
+    ) -> Tuple[float, Dict[str, Any], str]:
+        """Stage 1: Lexical (regex) matching.
+
+        Args:
+            text: User input
+            move: Compiled move definition
+
+        Returns:
+            (confidence, params, pattern_text)
+        """
+        best = (0.0, {}, "")
+
+        for trig in move["triggers"]:
+            if trig["participant"] not in ("user", "assistant"):
+                continue
+
+            for pat in trig["patterns"]:
+                m = pat["regex"].search(text)
+                if m:
+                    params = {k: (v.strip() if v else v) for k, v in m.groupdict().items()}
+                    # Exact regex match gets high confidence
+                    confidence = 0.85 if m else 0.0
+
+                    if confidence > best[0]:
+                        best = (confidence, params, pat["text"])
+
+        return best
+
+    def _embedding_match(
+        self,
+        text: str,
+        move: Dict[str, Any]
+    ) -> Tuple[float, Dict[str, Any], str]:
+        """Stage 2: Embedding-based semantic matching.
+
+        Args:
+            text: User input
+            move: Compiled move definition
+
+        Returns:
+            (confidence, params, pattern_text)
+        """
+        best = (0.0, {}, "")
+
+        for trig in move["triggers"]:
+            if trig["participant"] not in ("user", "assistant"):
+                continue
+
+            for pat in trig["patterns"]:
+                # Try regex first for parameter extraction
+                m = pat["regex"].search(text)
+                params = {}
+                if m:
+                    params = {k: (v.strip() if v else v) for k, v in m.groupdict().items()}
+
+                # Semantic similarity via embeddings
+                if self.emb.enabled:
+                    sim = cosine(self.emb.embed(text), self.emb.embed(pat["text"]))
+                    confidence = min(1.0, 0.4 + 0.6 * sim)
+                else:
+                    # Fallback to token overlap
+                    confidence = token_overlap(text, pat["text"])
+
+                if confidence > best[0]:
+                    best = (confidence, params, pat["text"])
+
+        return best
+
+    async def _llm_match(
+        self,
+        text: str,
+        move: Dict[str, Any],
+        context: "MatchingContext"
+    ) -> Tuple[float, Dict[str, Any], str, str]:
+        """Stage 3: LLM semantic matching with context.
+
+        Args:
+            text: User input
+            move: Compiled move definition
+            context: Rich matching context
+
+        Returns:
+            (confidence, params, pattern_text, reasoning)
+        """
+        if not self.llm_matcher:
+            return (0.0, {}, "", "LLM matcher not initialized")
+
+        best = (0.0, {}, "", "")
+
+        for trig in move["triggers"]:
+            if trig["participant"] not in ("user", "assistant"):
+                continue
+
+            for pat in trig["patterns"]:
+                # Try regex for parameter extraction
+                m = pat["regex"].search(text)
+                params = {}
+                if m:
+                    params = {k: (v.strip() if v else v) for k, v in m.groupdict().items()}
+
+                # LLM semantic match with context
+                result = await self.llm_matcher.match(text, pat["text"], context)
+                confidence = result.get("confidence", 0.0)
+                reasoning = result.get("reasoning", "")
+
+                if confidence > best[0]:
+                    best = (confidence, params, pat["text"], reasoning)
+
+        return best
+
+    async def match(
+        self,
+        text: str,
+        compiled_game: Dict[str, Any],
+        context: "MatchingContext" = None
+    ) -> Dict[str, Any]:
+        """Match text against all moves using cascade strategy.
+
+        Tries stages in order, stopping when confident enough:
+        1. Lexical (if confidence >= lexical_threshold)
+        2. Embedding (if confidence >= embedding_threshold)
+        3. LLM Semantic (if enabled)
+
+        Args:
+            text: User input
+            compiled_game: Compiled game IR
+            context: Optional matching context for LLM stage
+
+        Returns:
+            Dict with move, score, params, stage, and metadata
+        """
+        best_overall = None
+        provenance = []
+
+        # Try each move
+        for move in compiled_game["moves"]:
+            # Stage 1: Lexical matching
+            lex_conf, lex_params, lex_pattern = self._lexical_match(text, move)
+            provenance.append(f"lexical:{move['id']}={lex_conf:.2f}")
+
+            # Short-circuit if lexical is confident enough
+            if lex_conf >= self.config.cascade_lexical_threshold:
+                return {
+                    "move": move,
+                    "score": lex_conf,
+                    "params": lex_params,
+                    "stage": "lexical",
+                    "pattern": lex_pattern,
+                    "provenance": provenance
+                }
+
+            # Stage 2: Embedding matching
+            emb_conf, emb_params, emb_pattern = self._embedding_match(text, move)
+            provenance.append(f"embedding:{move['id']}={emb_conf:.2f}")
+
+            # Short-circuit if embedding is confident enough
+            if emb_conf >= self.config.cascade_embedding_threshold:
+                return {
+                    "move": move,
+                    "score": emb_conf,
+                    "params": emb_params,
+                    "stage": "embedding",
+                    "pattern": emb_pattern,
+                    "provenance": provenance
+                }
+
+            # Track best so far
+            best_conf = max(lex_conf, emb_conf)
+            if not best_overall or best_conf > best_overall["score"]:
+                best_overall = {
+                    "move": move,
+                    "score": best_conf,
+                    "params": emb_params if emb_conf > lex_conf else lex_params,
+                    "stage": "embedding" if emb_conf > lex_conf else "lexical",
+                    "pattern": emb_pattern if emb_conf > lex_conf else lex_pattern
+                }
+
+        # Stage 3: LLM semantic matching (only if needed)
+        # Only use expensive LLM if best match so far is below a reasonable threshold
+        llm_threshold = 0.85  # If we have 0.85+ confidence from embedding, skip LLM
+
+        if self.llm_matcher and context and (not best_overall or best_overall["score"] < llm_threshold):
+            for move in compiled_game["moves"]:
+                llm_conf, llm_params, llm_pattern, llm_reasoning = await self._llm_match(
+                    text, move, context
+                )
+                provenance.append(f"llm:{move['id']}={llm_conf:.2f}")
+
+                if llm_conf > best_overall["score"]:
+                    best_overall = {
+                        "move": move,
+                        "score": llm_conf,
+                        "params": llm_params,
+                        "stage": "llm_semantic",
+                        "pattern": llm_pattern,
+                        "reasoning": llm_reasoning
+                    }
+
+                    # Early exit if we get very confident match
+                    if llm_conf >= 0.90:
+                        break
+
+        # Return best match found
+        if best_overall:
+            best_overall["provenance"] = provenance
+            return best_overall
+
+        # No match found
+        return {
+            "move": None,
+            "score": 0.0,
+            "params": {},
+            "stage": "none",
+            "provenance": provenance
+        }

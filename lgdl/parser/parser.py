@@ -1,7 +1,7 @@
 from lark import Lark, Transformer, Token
 from pathlib import Path
 from typing import List
-from .ast import Game, Move, Trigger, Pattern, Block, Action, Capability, SlotBlock, SlotDefinition
+from .ast import Game, Move, Trigger, Pattern, Block, Action, Capability, SlotBlock, SlotDefinition, VocabularyEntry
 
 GRAMMAR_PATH = Path(__file__).resolve().parents[1] / "spec" / "grammar_v0_1.lark"
 
@@ -27,6 +27,7 @@ class ToAST(Transformer):
         return Game(
             name=name,
             description=body.get("description"),
+            vocabulary=body.get("vocabulary", []),
             capabilities=body.get("capabilities", {}),
             moves=body.get("moves", [])
         )
@@ -36,6 +37,8 @@ class ToAST(Transformer):
         for it in items:
             if isinstance(it, dict) and "capabilities" in it:
                 out["capabilities"] = it["capabilities"]
+            elif isinstance(it, dict) and "vocabulary" in it:
+                out["vocabulary"] = it["vocabulary"]
             elif isinstance(it, list):  # moves
                 out["moves"] = it
             elif isinstance(it, str):   # description
@@ -44,6 +47,17 @@ class ToAST(Transformer):
 
     def description_section(self, items):
         return _strip_quotes(items[0])
+
+    def vocabulary_section(self, items):
+        """Parse vocabulary section: vocabulary { ... }"""
+        vocab_entries = [v for v in items if isinstance(v, VocabularyEntry)]
+        return {"vocabulary": vocab_entries}
+
+    def vocabulary_entry(self, items):
+        """Parse vocabulary entry: "term" also means: ["syn1", "syn2"]"""
+        term = _strip_quotes(items[0])
+        synonyms = items[1] if len(items) > 1 else []
+        return VocabularyEntry(term=term, synonyms=synonyms)
 
     def capabilities_section(self, items):
         caps = {}
@@ -395,3 +409,20 @@ def parse_lgdl(path: str) -> Game:
     if isinstance(games, list) and games:
         return games[0]
     return games
+
+
+def parse_lgdl_source(source: str) -> List[Game]:
+    """Parse LGDL source string directly (for testing).
+
+    Args:
+        source: LGDL source code as string
+
+    Returns:
+        List of Game AST nodes
+    """
+    parser = Lark(Path(GRAMMAR_PATH).read_text(), start="start", parser="lalr")
+    tree = parser.parse(source)
+    games = ToAST().transform(tree)
+    if isinstance(games, list):
+        return games
+    return [games] if games else []

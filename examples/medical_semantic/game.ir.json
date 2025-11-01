@@ -1,0 +1,423 @@
+{
+  "name": "medical_semantic",
+  "description": "Emergency room triage with context-aware semantic matching",
+  "vocabulary": {
+    "heart": [
+      "ticker",
+      "chest",
+      "cardiovascular",
+      "cardiac"
+    ],
+    "pain": [
+      "hurting",
+      "aching",
+      "discomfort",
+      "bothering me",
+      "sore"
+    ],
+    "severe": [
+      "really bad",
+      "intense",
+      "unbearable",
+      "terrible"
+    ],
+    "head": [
+      "noggin",
+      "skull",
+      "cranium"
+    ],
+    "stomach": [
+      "belly",
+      "gut",
+      "abdomen",
+      "tummy"
+    ]
+  },
+  "moves": [
+    {
+      "id": "pain_assessment",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "I have pain",
+              "mods": [],
+              "regex": "I have pain"
+            },
+            {
+              "text": "I'm in pain",
+              "mods": [],
+              "regex": "I'm in pain"
+            },
+            {
+              "text": "pain in my {location}",
+              "mods": [],
+              "regex": "pain in my (?P<location>.+)"
+            },
+            {
+              "text": "{location} hurts",
+              "mods": [],
+              "regex": "(?P<location>.+) hurts"
+            },
+            {
+              "text": "my {location} is hurting",
+              "mods": [],
+              "regex": "my (?P<location>.+) is hurting"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "slot_missing",
+            "slot": "location"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Where exactly is the pain located?",
+                "kind": "prompt_slot"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "slot_missing",
+            "slot": "severity"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "On a scale from 1 to 10, how severe is the pain?",
+                "kind": "prompt_slot"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "all_slots_filled"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "I understand you have {severity}/10 pain in your {location}. Let me assess this."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "medical",
+                  "function": "assess_pain",
+                  "intent": "pain triage",
+                  "await": false,
+                  "timeout": 2.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "successful"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Based on your symptoms (severity {severity}, location {location}), here's my assessment. Please wait in the triage area."
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "failed"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "I'm having trouble with the assessment system. Let me get a nurse for you immediately."
+              }
+            }
+          ]
+        }
+      ],
+      "slots": {
+        "location": {
+          "type": "string",
+          "required": true,
+          "default": null
+        },
+        "severity": {
+          "type": "range",
+          "required": true,
+          "default": null,
+          "min": 1.0,
+          "max": 10.0
+        }
+      },
+      "slot_prompts": {
+        "location": "Where exactly is the pain located?",
+        "severity": "On a scale from 1 to 10, how severe is the pain?"
+      },
+      "slot_conditions": {
+        "all_slots_filled": [
+          {
+            "type": "respond",
+            "data": {
+              "text": "I understand you have {severity}/10 pain in your {location}. Let me assess this."
+            }
+          },
+          {
+            "type": "capability",
+            "data": {
+              "call": {
+                "service": "medical",
+                "function": "assess_pain",
+                "intent": "pain triage",
+                "await": false,
+                "timeout": 2.0
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "chest_pain_priority",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "chest pain",
+              "mods": [],
+              "regex": "chest pain"
+            },
+            {
+              "text": "my chest hurts",
+              "mods": [],
+              "regex": "my chest hurts"
+            },
+            {
+              "text": "pain in my chest",
+              "mods": [],
+              "regex": "pain in my chest"
+            },
+            {
+              "text": "heart pain",
+              "mods": [],
+              "regex": "heart pain"
+            },
+            {
+              "text": "ticker hurts",
+              "mods": [],
+              "regex": "ticker hurts"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Chest pain requires immediate attention. I'm alerting the emergency team now."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "medical",
+                  "function": "code_blue",
+                  "intent": "chest pain emergency",
+                  "await": false,
+                  "timeout": 1.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "successful"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Emergency team has been notified and will be with you in under 2 minutes. Please sit down and try to stay calm."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "breathing_difficulty",
+      "threshold": 0.8,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "I can't breathe",
+              "mods": [],
+              "regex": "I can't breathe"
+            },
+            {
+              "text": "short of breath",
+              "mods": [],
+              "regex": "short of breath"
+            },
+            {
+              "text": "difficulty breathing",
+              "mods": [],
+              "regex": "difficulty breathing"
+            },
+            {
+              "text": "breathing is hard",
+              "mods": [],
+              "regex": "breathing is hard"
+            },
+            {
+              "text": "can't catch my breath",
+              "mods": [],
+              "regex": "can't catch my breath"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Breathing difficulty is serious. Checking your vitals now."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "medical",
+                  "function": "check_vitals",
+                  "intent": "respiratory check",
+                  "await": false,
+                  "timeout": 1.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "successful"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Vitals checked. The medical team is being notified immediately. Try to take slow, deep breaths if you can."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "general_complaint",
+      "threshold": 0.2,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "I don't feel good",
+              "mods": [],
+              "regex": "I don't feel good"
+            },
+            {
+              "text": "I'm not feeling well",
+              "mods": [],
+              "regex": "I'm not feeling well"
+            },
+            {
+              "text": "something is wrong",
+              "mods": [],
+              "regex": "something is wrong"
+            },
+            {
+              "text": "I feel bad",
+              "mods": [],
+              "regex": "I feel bad"
+            },
+            {
+              "text": "I'm sick",
+              "mods": [],
+              "regex": "I'm sick"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "uncertain"
+          },
+          "actions": [
+            {
+              "type": "noop",
+              "data": {}
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "confident"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Thank you for clarifying. Let me help you with that."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "capabilities": []
+}

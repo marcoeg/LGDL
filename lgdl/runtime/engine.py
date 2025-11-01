@@ -1,11 +1,13 @@
 import uuid
 import os
+import time
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Set
 from pathlib import Path
 from ..parser.parser import parse_lgdl
 from ..parser.ir import compile_game, extract_capability_allowlist
-from .matcher import TwoStageMatcher
+from .matcher import TwoStageMatcher, CascadeMatcher
+from .matching_context import MatchingContext
 from .firewall import sanitize
 from .policy import PolicyGuard
 from .capability import CapabilityClient
@@ -16,6 +18,8 @@ from .context import ContextEnricher
 from .response_parser import ResponseParser
 from .slots import SlotManager
 from ..errors import RuntimeError as LGDLRuntimeError
+from ..config import LGDLConfig
+from ..metrics import get_global_metrics
 
 def eval_condition(cond: Dict[str, Any], score: float, threshold: float, last_status: str, ctx: Dict[str, Any]) -> bool:
     if not cond:
@@ -63,7 +67,8 @@ class LGDLRuntime:
         compiled: Dict[str, Any],
         allowlist: Optional[Set[str]] = None,
         capability_contract_path: Optional[str] = None,
-        state_manager: Optional[StateManager] = None
+        state_manager: Optional[StateManager] = None,
+        config: Optional[LGDLConfig] = None
     ):
         """
         Initialize LGDL runtime with per-game configuration.
@@ -73,13 +78,29 @@ class LGDLRuntime:
             allowlist: Set of allowed capability functions. If None, auto-extracted from IR.
             capability_contract_path: Path to capability_contract.json. If None, capabilities disabled.
             state_manager: StateManager for multi-turn conversations. If None, conversations are stateless.
+            config: LGDLConfig for feature flags and settings. If None, loads from environment.
 
         Note:
-            Backward compatible: If allowlist/capability_contract_path not provided,
-            falls back to extracting allowlist from IR and disabling capabilities.
+            Backward compatible: If config not provided, loads from environment with
+            all new features disabled by default.
         """
         self.compiled = compiled
-        self.matcher = TwoStageMatcher()
+        self.config = config or LGDLConfig.from_env()
+
+        # Phase 1: Config-based matcher selection
+        print(f"[Runtime] Initializing LGDL runtime for game: {compiled.get('name', 'unknown')}")
+
+        if self.config.enable_llm_semantic_matching:
+            # Use cascade matcher with LLM semantic stage
+            # This will raise ValueError if no API key (explicit failure)
+            print(f"[Runtime] LLM semantic matching: ENABLED")
+            self.matcher = CascadeMatcher(self.config)
+            self.use_cascade = True
+        else:
+            # Backward compatible: Use existing two-stage matcher
+            print(f"[Runtime] LLM semantic matching: DISABLED (using TwoStageMatcher)")
+            self.matcher = TwoStageMatcher()
+            self.use_cascade = False
 
         # Auto-extract allowlist from IR if not provided
         if allowlist is None:
@@ -143,7 +164,34 @@ class LGDLRuntime:
 
         # If not awaiting slot, match against moves using potentially enriched input
         if not mv:
-            match = self.matcher.match(input_for_matching, self.compiled)
+            # Phase 1: Build matching context for cascade (if enabled)
+            matching_context = None
+            start_time = time.time()
+
+            if self.use_cascade:
+                # Build rich context for LLM semantic matching
+                matching_context = MatchingContext.from_state(self.compiled, state)
+
+            # Match with context (cascade uses it, two-stage ignores it)
+            if self.use_cascade:
+                match = await self.matcher.match(input_for_matching, self.compiled, matching_context)
+            else:
+                match = self.matcher.match(input_for_matching, self.compiled)
+
+            # Track metrics
+            latency_ms = (time.time() - start_time) * 1000
+            match_stage = match.get("stage", "unknown")
+            match_cost = match.get("cost", 0.0) if self.use_cascade else 0.0
+
+            # Record in global metrics
+            if match["move"]:
+                get_global_metrics().record_turn(
+                    stage=match_stage,
+                    confidence=match["score"],
+                    latency_ms=latency_ms,
+                    cost_usd=match_cost
+                )
+
             if not match["move"]:
                 return {
                     "move_id": "none",
@@ -151,7 +199,8 @@ class LGDLRuntime:
                     "response": "Sorry, I didn't catch that.",
                     "action": None,
                     "manifest_id": str(uuid.uuid4()),
-                    "firewall_triggered": flagged
+                    "firewall_triggered": flagged,
+                    "stage": match_stage
                 }
             mv = match["move"]
             score = match["score"]
@@ -342,6 +391,14 @@ class LGDLRuntime:
             "manifest_id": str(uuid.uuid4()),
             "firewall_triggered": flagged
         }
+
+        # Phase 1: Add cascade stage metadata
+        if self.use_cascade:
+            result["stage"] = match_stage
+            if match.get("reasoning"):
+                result["reasoning"] = match.get("reasoning")
+            if match.get("provenance"):
+                result["provenance"] = match.get("provenance")
 
         if negotiation_result:
             result["negotiation"] = self._negotiation_to_manifest(negotiation_result)

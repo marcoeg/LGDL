@@ -9,11 +9,16 @@ program: (COMMENT | game_def)*
 
 game_def: "game" IDENT ("extends" IDENT)? "{" game_body "}"
 game_body: (description_section
+          | vocabulary_section
           | capabilities_section
           | moves_section
           | COMMENT)*
 
 description_section: "description:" text_value
+
+// Vocabulary (Phase 1 - context-aware matching)
+vocabulary_section: "vocabulary" "{" vocabulary_entry* "}"
+vocabulary_entry: STRING "also" "means:" "[" string_list "]"
 
 capabilities_section: "capabilities" "{" capability* "}"
 capability: IDENT ":" capability_spec

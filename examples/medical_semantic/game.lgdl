@@ -1,0 +1,113 @@
+game medical_semantic {
+  description: "Emergency room triage with context-aware semantic matching"
+
+  vocabulary {
+    "heart" also means: ["ticker", "chest", "cardiovascular", "cardiac"]
+    "pain" also means: ["hurting", "aching", "discomfort", "bothering me", "sore"]
+    "severe" also means: ["really bad", "intense", "unbearable", "terrible"]
+    "head" also means: ["noggin", "skull", "cranium"]
+    "stomach" also means: ["belly", "gut", "abdomen", "tummy"]
+  }
+
+  capabilities {
+    medical: ["assess_pain", "code_blue", "check_vitals"]
+  }
+
+  moves {
+    move pain_assessment {
+      slots {
+        location: string required
+        severity: range(1, 10) required
+      }
+
+      when user says something like: [
+        "I have pain",
+        "I'm in pain",
+        "pain in my {location}",
+        "{location} hurts",
+        "my {location} is hurting"
+      ]
+      confidence: medium
+
+      when slot location is missing {
+        prompt slot: "Where exactly is the pain located?"
+      }
+
+      when slot severity is missing {
+        prompt slot: "On a scale from 1 to 10, how severe is the pain?"
+      }
+
+      when all_slots_filled {
+        respond with: "I understand you have {severity}/10 pain in your {location}. Let me assess this."
+        medical.assess_pain for "pain triage" await timeout 2
+      }
+
+      when successful {
+        respond with: "Based on your symptoms (severity {severity}, location {location}), here's my assessment. Please wait in the triage area."
+      }
+
+      when failed {
+        respond with: "I'm having trouble with the assessment system. Let me get a nurse for you immediately."
+      }
+    }
+
+    move chest_pain_priority {
+      when user says something like: [
+        "chest pain",
+        "my chest hurts",
+        "pain in my chest",
+        "heart pain",
+        "ticker hurts"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "Chest pain requires immediate attention. I'm alerting the emergency team now."
+        medical.code_blue for "chest pain emergency" await timeout 1
+      }
+
+      when successful {
+        respond with: "Emergency team has been notified and will be with you in under 2 minutes. Please sit down and try to stay calm."
+      }
+    }
+
+    move breathing_difficulty {
+      when user says something like: [
+        "I can't breathe",
+        "short of breath",
+        "difficulty breathing",
+        "breathing is hard",
+        "can't catch my breath"
+      ]
+      confidence: high
+
+      when confident {
+        respond with: "Breathing difficulty is serious. Checking your vitals now."
+        medical.check_vitals for "respiratory check" await timeout 1
+      }
+
+      when successful {
+        respond with: "Vitals checked. The medical team is being notified immediately. Try to take slow, deep breaths if you can."
+      }
+    }
+
+    move general_complaint {
+      when user says something like: [
+        "I don't feel good",
+        "I'm not feeling well",
+        "something is wrong",
+        "I feel bad",
+        "I'm sick"
+      ]
+      confidence: low
+
+      when uncertain {
+        negotiate "I'd like to help. Can you tell me your main symptom? For example: pain, breathing difficulty, nausea, dizziness?" until confident
+      }
+
+      when confident {
+        respond with: "Thank you for clarifying. Let me help you with that."
+      }
+    }
+  }
+}

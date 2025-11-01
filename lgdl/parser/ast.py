@@ -55,8 +55,19 @@ class Capability:
     functions: List[str] | str
 
 @dataclass
+class VocabularyEntry:
+    """Single vocabulary entry mapping a term to its synonyms.
+
+    Example:
+        VocabularyEntry(term="heart", synonyms=["ticker", "chest", "cardiovascular"])
+    """
+    term: str
+    synonyms: List[str] = field(default_factory=list)
+
+@dataclass
 class Game:
     name: str
     description: Optional[str] = None
+    vocabulary: List[VocabularyEntry] = field(default_factory=list)  # Phase 1: context-aware matching
     capabilities: Dict[str, Capability] = field(default_factory=dict)
     moves: List[Move] = field(default_factory=list)
