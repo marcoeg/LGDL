@@ -173,6 +173,9 @@ class ToAST(Transformer):
         required = True
         optional = False
         default = None
+        extraction_strategy = "regex"  # Default
+        vocabulary = {}
+        semantic_context = None
 
         for mod in items[2:]:
             if isinstance(mod, dict):
@@ -184,6 +187,13 @@ class ToAST(Transformer):
                     optional = True
                 elif mod.get("modifier") == "default":
                     default = mod.get("value")
+                # Phase 2: New modifiers
+                elif "extraction_strategy" in mod:
+                    extraction_strategy = mod["extraction_strategy"]
+                elif "vocabulary" in mod:
+                    vocabulary = mod["vocabulary"]
+                elif "semantic_context" in mod:
+                    semantic_context = mod["semantic_context"]
 
         return SlotDefinition(
             name=name,
@@ -193,7 +203,11 @@ class ToAST(Transformer):
             default=default,
             min_value=slot_type_data.get("min"),
             max_value=slot_type_data.get("max"),
-            enum_values=slot_type_data.get("enum_values", [])
+            enum_values=slot_type_data.get("enum_values", []),
+            # Phase 2: Semantic extraction
+            extraction_strategy=extraction_strategy,
+            vocabulary=vocabulary,
+            semantic_context=semantic_context
         )
 
     def slot_type(self, items):
@@ -224,6 +238,31 @@ class ToAST(Transformer):
         first = items[0]
         mod_name = first.value if hasattr(first, "value") else str(first)
         return {"modifier": mod_name}
+
+    def slot_modifier_extraction(self, items):
+        """Parse extract using regex|semantic|hybrid"""
+        # items[0] is IDENT (regex/semantic/hybrid)
+        strategy = items[0].value if hasattr(items[0], "value") else str(items[0])
+        return {"extraction_strategy": strategy}
+
+    def slot_modifier_vocabulary(self, items):
+        """Parse with vocabulary { "term" also means: [...] }"""
+        vocabulary = {}
+        for entry in items:
+            if isinstance(entry, dict) and "term" in entry:
+                vocabulary[entry["term"]] = entry["synonyms"]
+        return {"vocabulary": vocabulary}
+
+    def slot_vocab_entry(self, items):
+        """Parse slot vocabulary entry: "term" also means: ["syn1"]"""
+        term = _strip_quotes(items[0].value if hasattr(items[0], "value") else str(items[0]))
+        synonyms = items[1] if len(items) > 1 and isinstance(items[1], list) else []
+        return {"term": term, "synonyms": synonyms}
+
+    def slot_modifier_context(self, items):
+        """Parse with context "help text" """
+        context_text = _strip_quotes(items[0].value if hasattr(items[0], "value") else str(items[0]))
+        return {"semantic_context": context_text}
 
     def slot_modifier_default(self, items):
         """Parse default modifier: default(value)"""

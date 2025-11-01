@@ -35,6 +35,10 @@ class SlotDefinition:
     max_value: Optional[float] = None
     # For enum type
     enum_values: List[str] = field(default_factory=list)
+    # Phase 2: Semantic extraction
+    extraction_strategy: str = "regex"  # "regex" | "semantic" | "hybrid"
+    vocabulary: Dict[str, List[str]] = field(default_factory=dict)
+    semantic_context: Optional[str] = None
 
 @dataclass
 class SlotBlock:

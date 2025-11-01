@@ -1,0 +1,78 @@
+game medical_intake_semantic {
+  description: "Medical patient intake with semantic slot extraction"
+
+  vocabulary {
+    "heart" also means: ["ticker", "chest", "cardiovascular", "cardiac"]
+    "pain" also means: ["hurting", "aching", "discomfort", "sore"]
+    "stomach" also means: ["belly", "gut", "tummy", "abdomen"]
+    "head" also means: ["noggin", "skull", "cranium"]
+  }
+
+  capabilities {
+    ehr: ["fetch_patient", "create_visit"]
+  }
+
+  moves {
+    move pain_intake {
+      slots {
+        pain_location: string required extract using semantic with vocabulary { "chest" also means: ["ticker", "heart"] } with context "Body location where patient experiences pain"
+        pain_severity: range(1, 10) required extract using hybrid
+        onset_timing: timeframe required extract using regex
+      }
+
+      when user says something like: [
+        "I have pain",
+        "I'm in pain",
+        "{pain_location} hurts",
+        "pain in my {pain_location}"
+      ]
+      confidence: medium
+
+      when slot pain_location is missing {
+        prompt slot: "Where exactly do you feel the pain?"
+      }
+
+      when slot pain_severity is missing {
+        prompt slot: "On a scale from 1 to 10, how bad is the pain?"
+      }
+
+      when slot onset_timing is missing {
+        prompt slot: "When did this pain start?"
+      }
+
+      when all_slots_filled {
+        respond with: "Thank you. I've recorded: {pain_severity}/10 pain in your {pain_location} that started {onset_timing}."
+        ehr.create_visit for "pain intake" await timeout 2
+      }
+
+      when successful {
+        respond with: "Your visit has been created. The medical team will assess your {pain_location} pain shortly."
+      }
+
+      when failed {
+        respond with: "I'm having trouble creating the visit record. Please see the front desk."
+      }
+    }
+
+    move general_symptom {
+      slots {
+        symptom_description: string required extract using semantic with context "Main symptom or complaint in patient's own words"
+      }
+
+      when user says something like: [
+        "I don't feel well",
+        "I'm not feeling good",
+        "something is wrong"
+      ]
+      confidence: low
+
+      when slot symptom_description is missing {
+        prompt slot: "Can you describe what's bothering you most?"
+      }
+
+      when all_slots_filled {
+        respond with: "I understand you're experiencing: {symptom_description}. Let me help you with that."
+      }
+    }
+  }
+}

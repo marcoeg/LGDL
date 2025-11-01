@@ -47,7 +47,7 @@ modifier_list: MODIFIER ("," MODIFIER)*
 confidence_clause: ("confidence" "needed:" | "confidence:") confidence_expr
 confidence_expr: NUMBER | CONF_LEVEL
 
-// Slots (v1.0 slot-filling feature)
+// Slots (v1.0 slot-filling feature, v2.0 semantic extraction)
 slots_block: "slots" "{" slot_definition+ "}"
 slot_definition: IDENT ":" slot_type slot_modifier*
 
@@ -59,6 +59,11 @@ SLOT_TYPE_SIMPLE.2: "string" | "number" | "timeframe" | "date"
 
 slot_modifier: SLOT_MOD_SIMPLE
              | "default" "(" value ")"             -> slot_modifier_default
+             | "extract" "using" IDENT             -> slot_modifier_extraction
+             | "with" "vocabulary" "{" slot_vocab_entry* "}"  -> slot_modifier_vocabulary
+             | "with" "context" STRING             -> slot_modifier_context
+
+slot_vocab_entry: STRING "also" "means:" "[" string_list "]"
 
 SLOT_MOD_SIMPLE.2: "required" | "optional"
 

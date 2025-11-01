@@ -1,4 +1,4 @@
-"""Slot-filling manager for multi-turn conversations (v1.0)"""
+"""Slot-filling manager for multi-turn conversations (v1.0 + Phase 2 semantic extraction)"""
 import re
 from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
 from datetime import datetime
@@ -10,17 +10,26 @@ if TYPE_CHECKING:
 class SlotManager:
     """Manages slot-filling for multi-turn conversations"""
 
-    def __init__(self, state_manager: Optional["StateManager"] = None):
+    def __init__(self, state_manager: Optional["StateManager"] = None, config=None):
         """
         Initialize SlotManager.
 
         Args:
             state_manager: Optional StateManager for persistent storage.
                            If None, uses in-memory storage (ephemeral).
+            config: LGDLConfig for extraction strategies (Phase 2).
+                    If None, loads from environment.
         """
         self.state_manager = state_manager
         # In-memory storage (fallback or when no state_manager): {conversation_id: {move_id: {slot_name: value}}}
         self._slot_values: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
+        # Phase 2: Initialize extraction engine
+        from ..config import LGDLConfig
+        from .slot_extractors import SlotExtractionEngine
+
+        self.config = config if config else LGDLConfig.from_env()
+        self.extraction_engine = SlotExtractionEngine(self.config, state_manager)
 
     async def get_missing_slots(
         self,
@@ -177,24 +186,25 @@ class SlotManager:
         except (ValueError, TypeError):
             return False, None
 
-    def extract_slot_from_input(
+    async def extract_slot_from_input(
         self,
         input_text: str,
-        slot_type: str,
-        extracted_params: dict
+        slot_def: dict,  # Changed from slot_type to full slot_def (Phase 2)
+        context: dict = None
     ) -> Optional[Any]:
         """
-        Extract slot value from user input using pattern matching.
+        Extract slot value from user input using configured strategy.
 
-        Precedence order:
-        1. Pattern-captured params (handled by caller)
-        2. Type-specific extraction (this method)
-        3. Whole input as fallback
+        Phase 2: Now supports multiple extraction strategies:
+        - regex: Fast, deterministic (default, backward compatible)
+        - semantic: LLM-based with vocabulary understanding
+        - hybrid: Try regex, fallback to semantic
 
         Args:
             input_text: Raw user input
-            slot_type: Type of slot to extract
-            extracted_params: Parameters extracted from pattern matching
+            slot_def: Full slot definition with type, extraction_strategy, vocabulary, etc.
+                     For backward compatibility, can be just a string (slot type)
+            context: Rich context for semantic extraction (conversation history, filled slots)
 
         Returns:
             Extracted value or None if not found
@@ -202,23 +212,33 @@ class SlotManager:
         if not input_text or not input_text.strip():
             return None
 
-        input_text = input_text.strip()
+        # Backward compatibility: if slot_def is just a string, treat as slot_type with regex
+        if isinstance(slot_def, str):
+            slot_def = {
+                "type": slot_def,
+                "extraction_strategy": "regex",
+                "name": "unknown",
+                "enum_values": []  # Will be validated later if needed
+            }
 
-        # Type-specific extraction
-        if slot_type in ("number", "range"):
-            # Extract first number from input
-            num_match = re.search(r'-?\d+\.?\d*', input_text)
-            if num_match:
-                return float(num_match.group())
-            # If no number found, fall through to return whole input
+        # Build context if not provided
+        if context is None:
+            context = {}
 
-        elif slot_type == "enum":
-            # For enum, return the whole input - validation will match against values
-            return input_text
+        # Use extraction engine (Phase 2)
+        result = await self.extraction_engine.extract_slot(
+            user_input=input_text.strip(),
+            slot_def=slot_def,
+            context=context
+        )
 
-        # For string, timeframe, date: return whole input
-        # More sophisticated extraction would use NER or LLM
-        return input_text
+        if result.success:
+            print(f"[Slot] Extracted value using {result.strategy_used}: {result.value} (conf={result.confidence:.2f})")
+            if result.reasoning:
+                print(f"[Slot] Reasoning: {result.reasoning}")
+            return result.value
+
+        return None
 
     async def fill_slot(
         self,

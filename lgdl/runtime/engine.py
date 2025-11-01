@@ -125,7 +125,8 @@ class LGDLRuntime:
         self.state_manager = state_manager
         self.context_enricher = ContextEnricher() if state_manager else None
         self.response_parser = ResponseParser() if state_manager else None
-        self.slot_manager = SlotManager(state_manager) if state_manager else None
+        # Phase 2: Pass config to SlotManager for extraction strategies
+        self.slot_manager = SlotManager(state_manager, self.config) if state_manager else None
 
     async def process_turn(self, conversation_id: str, user_id: str, text: str, context: Dict[str, Any]):
         # Load conversation state if state management is enabled
@@ -259,6 +260,13 @@ class LGDLRuntime:
             # Determine if we're responding to a specific slot prompt
             awaiting_specific_slot = state.awaiting_slot_name if state.awaiting_slot_for_move == mv["id"] else None
 
+            # Phase 2: Build rich context for semantic extraction
+            extraction_context = {
+                "conversation_history": state.history[-5:] if state and hasattr(state, "history") else [],
+                "filled_slots": await self.slot_manager.get_slot_values(mv["id"], conversation_id),
+                "current_move": mv["id"]
+            }
+
             # Try to extract slot values from current input
             for slot_name, slot_def in mv["slots"].items():
                 # Check if slot already filled
@@ -272,10 +280,11 @@ class LGDLRuntime:
 
                     # Priority 2: If we're awaiting THIS specific slot, extract from input
                     elif awaiting_specific_slot == slot_name:
-                        value = self.slot_manager.extract_slot_from_input(
+                        # Phase 2: Pass full slot_def and context (now async)
+                        value = await self.slot_manager.extract_slot_from_input(
                             cleaned,
-                            slot_def["type"],
-                            params
+                            slot_def,  # Full definition with extraction_strategy, vocabulary
+                            extraction_context
                         )
                         if value:
                             print(f"[Slot] Extracted '{slot_name}' from awaiting input: {value}")

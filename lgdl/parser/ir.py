@@ -86,7 +86,11 @@ def compile_move(mv: Move) -> Dict[str, Any]:
             slot_data = {
                 "type": slot_def.slot_type,
                 "required": slot_def.required,
-                "default": slot_def.default
+                "default": slot_def.default,
+                # Phase 2: Semantic extraction metadata
+                "extraction_strategy": slot_def.extraction_strategy,
+                "vocabulary": slot_def.vocabulary,
+                "semantic_context": slot_def.semantic_context
             }
             if slot_def.slot_type == "range":
                 # Note: Range bounds are inclusive (min <= value <= max)

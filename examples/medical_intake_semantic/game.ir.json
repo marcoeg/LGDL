@@ -1,0 +1,308 @@
+{
+  "name": "medical_intake_semantic",
+  "description": "Medical patient intake with semantic slot extraction",
+  "vocabulary": {
+    "heart": [
+      "ticker",
+      "chest",
+      "cardiovascular",
+      "cardiac"
+    ],
+    "pain": [
+      "hurting",
+      "aching",
+      "discomfort",
+      "sore"
+    ],
+    "stomach": [
+      "belly",
+      "gut",
+      "tummy",
+      "abdomen"
+    ],
+    "head": [
+      "noggin",
+      "skull",
+      "cranium"
+    ]
+  },
+  "moves": [
+    {
+      "id": "pain_intake",
+      "threshold": 0.5,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "I have pain",
+              "mods": [],
+              "regex": "I have pain"
+            },
+            {
+              "text": "I'm in pain",
+              "mods": [],
+              "regex": "I'm in pain"
+            },
+            {
+              "text": "{pain_location} hurts",
+              "mods": [],
+              "regex": "(?P<pain_location>.+) hurts"
+            },
+            {
+              "text": "pain in my {pain_location}",
+              "mods": [],
+              "regex": "pain in my (?P<pain_location>.+)"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "slot_missing",
+            "slot": "pain_location"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Where exactly do you feel the pain?",
+                "kind": "prompt_slot"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "slot_missing",
+            "slot": "pain_severity"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "On a scale from 1 to 10, how bad is the pain?",
+                "kind": "prompt_slot"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "slot_missing",
+            "slot": "onset_timing"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "When did this pain start?",
+                "kind": "prompt_slot"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "all_slots_filled"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Thank you. I've recorded: {pain_severity}/10 pain in your {pain_location} that started {onset_timing}."
+              }
+            },
+            {
+              "type": "capability",
+              "data": {
+                "call": {
+                  "service": "ehr",
+                  "function": "create_visit",
+                  "intent": "pain intake",
+                  "await": false,
+                  "timeout": 2.0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "successful"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Your visit has been created. The medical team will assess your {pain_location} pain shortly."
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "failed"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "I'm having trouble creating the visit record. Please see the front desk."
+              }
+            }
+          ]
+        }
+      ],
+      "slots": {
+        "pain_location": {
+          "type": "string",
+          "required": true,
+          "default": null,
+          "extraction_strategy": "semantic",
+          "vocabulary": {
+            "chest": [
+              "ticker",
+              "heart"
+            ]
+          },
+          "semantic_context": "Body location where patient experiences pain"
+        },
+        "pain_severity": {
+          "type": "range",
+          "required": true,
+          "default": null,
+          "extraction_strategy": "hybrid",
+          "vocabulary": {},
+          "semantic_context": null,
+          "min": 1.0,
+          "max": 10.0
+        },
+        "onset_timing": {
+          "type": "timeframe",
+          "required": true,
+          "default": null,
+          "extraction_strategy": "regex",
+          "vocabulary": {},
+          "semantic_context": null
+        }
+      },
+      "slot_prompts": {
+        "pain_location": "Where exactly do you feel the pain?",
+        "pain_severity": "On a scale from 1 to 10, how bad is the pain?",
+        "onset_timing": "When did this pain start?"
+      },
+      "slot_conditions": {
+        "all_slots_filled": [
+          {
+            "type": "respond",
+            "data": {
+              "text": "Thank you. I've recorded: {pain_severity}/10 pain in your {pain_location} that started {onset_timing}."
+            }
+          },
+          {
+            "type": "capability",
+            "data": {
+              "call": {
+                "service": "ehr",
+                "function": "create_visit",
+                "intent": "pain intake",
+                "await": false,
+                "timeout": 2.0
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "general_symptom",
+      "threshold": 0.2,
+      "triggers": [
+        {
+          "participant": "user",
+          "patterns": [
+            {
+              "text": "I don't feel well",
+              "mods": [],
+              "regex": "I don't feel well"
+            },
+            {
+              "text": "I'm not feeling good",
+              "mods": [],
+              "regex": "I'm not feeling good"
+            },
+            {
+              "text": "something is wrong",
+              "mods": [],
+              "regex": "something is wrong"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "kind": "when",
+          "condition": {
+            "special": "slot_missing",
+            "slot": "symptom_description"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "Can you describe what's bothering you most?",
+                "kind": "prompt_slot"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "when",
+          "condition": {
+            "special": "all_slots_filled"
+          },
+          "actions": [
+            {
+              "type": "respond",
+              "data": {
+                "text": "I understand you're experiencing: {symptom_description}. Let me help you with that."
+              }
+            }
+          ]
+        }
+      ],
+      "slots": {
+        "symptom_description": {
+          "type": "string",
+          "required": true,
+          "default": null,
+          "extraction_strategy": "semantic",
+          "vocabulary": {},
+          "semantic_context": "Main symptom or complaint in patient's own words"
+        }
+      },
+      "slot_prompts": {
+        "symptom_description": "Can you describe what's bothering you most?"
+      },
+      "slot_conditions": {
+        "all_slots_filled": [
+          {
+            "type": "respond",
+            "data": {
+              "text": "I understand you're experiencing: {symptom_description}. Let me help you with that."
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "capabilities": []
+}

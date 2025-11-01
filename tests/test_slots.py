@@ -276,28 +276,29 @@ async def test_has_slot(slot_manager):
     assert await slot_manager.has_slot(conv_id, move_id, "age") is False
 
 
-def test_extract_slot_from_input(slot_manager):
+@pytest.mark.asyncio
+async def test_extract_slot_from_input(slot_manager):
     """Test extracting slot value from user input"""
     # String extraction (returns trimmed input)
-    value = slot_manager.extract_slot_from_input("My chest", "string", {})
+    value = await slot_manager.extract_slot_from_input("My chest", "string", {})
     assert value == "My chest"
 
     # Number extraction (extracts first number)
-    value = slot_manager.extract_slot_from_input("  8 out of 10  ", "number", {})
+    value = await slot_manager.extract_slot_from_input("  8 out of 10  ", "number", {})
     assert value == 8.0  # Now extracts the number
 
-    value = slot_manager.extract_slot_from_input("the pain is 7", "number", {})
+    value = await slot_manager.extract_slot_from_input("the pain is 7", "number", {})
     assert value == 7.0
 
-    value = slot_manager.extract_slot_from_input("around 9.5", "range", {})
+    value = await slot_manager.extract_slot_from_input("around 9.5", "range", {})
     assert value == 9.5
 
     # Empty input
-    value = slot_manager.extract_slot_from_input("", "string", {})
+    value = await slot_manager.extract_slot_from_input("", "string", {})
     assert value is None
 
     # Enum extraction (returns whole input for validation)
-    value = slot_manager.extract_slot_from_input("I like blue", "enum", {})
+    value = await slot_manager.extract_slot_from_input("I like blue", "enum", {})
     assert value == "I like blue"
 
 
@@ -442,15 +443,16 @@ async def test_slot_persistence_survives_restart():
     assert all_slots == {"location": "chest", "severity": 8.0}
 
 
-def test_slot_extraction_precedence():
+@pytest.mark.asyncio
+async def test_slot_extraction_precedence():
     """Test that numeric extraction works correctly for different input formats"""
     slot_manager = SlotManager(state_manager=None)
 
     # Test number extraction from various formats
-    assert slot_manager.extract_slot_from_input("8", "number", {}) == 8.0
-    assert slot_manager.extract_slot_from_input("8.5", "number", {}) == 8.5
-    assert slot_manager.extract_slot_from_input("the pain is 7", "number", {}) == 7.0
-    assert slot_manager.extract_slot_from_input("about 9 out of 10", "number", {}) == 9.0
+    assert await slot_manager.extract_slot_from_input("8", "number", {}) == 8.0
+    assert await slot_manager.extract_slot_from_input("8.5", "number", {}) == 8.5
+    assert await slot_manager.extract_slot_from_input("the pain is 7", "number", {}) == 7.0
+    assert await slot_manager.extract_slot_from_input("about 9 out of 10", "number", {}) == 9.0
 
     # Test that pattern params are preferred (handled by engine, but document here)
     # When engine sees params["severity"] = 8, it uses that before calling extract_slot_from_input
