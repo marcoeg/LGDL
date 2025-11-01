@@ -139,6 +139,20 @@ class LGDLConfig:
     to detect regressions before human review.
     """
 
+    learning_confidence_boost: float = 0.05
+    """Confidence adjustment per successful/failed interaction.
+
+    Patterns that succeed get +0.05 confidence boost.
+    Patterns that fail get -0.05 confidence reduction.
+    """
+
+    learning_similarity_threshold: float = 0.8
+    """Similarity threshold for finding related patterns.
+
+    Used to determine if a proposed pattern is similar to existing ones.
+    Range: 0.0 (no similarity) to 1.0 (identical).
+    """
+
     # ====================
     # Runtime Configuration
     # ====================
@@ -217,6 +231,8 @@ class LGDLConfig:
             enable_learning=os.getenv("LGDL_ENABLE_LEARNING", "false").lower() == "true",
             learning_min_frequency=int(os.getenv("LGDL_LEARNING_MIN_FREQUENCY", "3")),
             learning_shadow_test_size=int(os.getenv("LGDL_LEARNING_SHADOW_TEST_SIZE", "1000")),
+            learning_confidence_boost=float(os.getenv("LGDL_LEARNING_CONFIDENCE_BOOST", "0.05")),
+            learning_similarity_threshold=float(os.getenv("LGDL_LEARNING_SIMILARITY_THRESHOLD", "0.8")),
 
             # Runtime configuration
             negotiation_enabled=os.getenv("LGDL_NEGOTIATION", "1") == "1",

@@ -33,6 +33,8 @@ class CapabilityClient:
             return self._fetch_med_list(payload)
         elif name == "ehr.fetch_allergies":
             return self._fetch_allergies(payload)
+        elif name == "ehr.create_visit":
+            return self._create_visit(payload)
 
         # Auth capabilities (support_v1)
         elif name == "auth.verify_user":
@@ -228,6 +230,28 @@ class CapabilityClient:
                     {"allergen": "Latex", "reaction": "Contact dermatitis"}
                 ],
                 "no_known_allergies": False
+            }
+        }
+
+    def _create_visit(self, payload: dict) -> dict:
+        """Mock visit creation in EHR system."""
+        pain_location = payload.get("pain_location", "unknown")
+        pain_severity = payload.get("pain_severity", 0)
+        onset_timing = payload.get("onset_timing", "unknown")
+
+        # Mock visit creation
+        visit_id = "VISIT-" + str(random.randint(10000, 99999))
+
+        return {
+            "status": "ok",
+            "message": f"Visit created for {pain_location} pain (severity: {pain_severity}/10)",
+            "data": {
+                "visit_id": visit_id,
+                "pain_location": pain_location,
+                "pain_severity": pain_severity,
+                "onset_timing": onset_timing,
+                "triage_priority": "high" if pain_severity >= 8 else "medium" if pain_severity >= 5 else "low",
+                "created_at": "2025-11-01T12:00:00Z"
             }
         }
 

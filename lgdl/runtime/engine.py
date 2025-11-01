@@ -128,6 +128,38 @@ class LGDLRuntime:
         # Phase 2: Pass config to SlotManager for extraction strategies
         self.slot_manager = SlotManager(state_manager, self.config) if state_manager else None
 
+        # Phase 3: Learning engine
+        if self.config.enable_learning:
+            from ..learning.engine import LearningEngine, PatternDatabase
+            from ..learning.shadow_test import ShadowTester
+            from ..learning.review import ReviewWorkflow
+
+            if not self.config.openai_api_key:
+                raise ValueError(
+                    "Learning engine requires OPENAI_API_KEY for pattern analysis"
+                )
+
+            # Create learning components
+            pattern_db = PatternDatabase()
+
+            self.learning = LearningEngine(
+                pattern_db=pattern_db,
+                embedding_client=self.emb if hasattr(self, 'emb') else None,
+                llm_client=self.matcher.llm_matcher.llm if self.use_cascade and hasattr(self.matcher, 'llm_matcher') and self.matcher.llm_matcher else None,
+                config=self.config
+            )
+
+            self.shadow_tester = ShadowTester(pattern_db, self.matcher)
+            self.review_workflow = ReviewWorkflow(self.learning, self.shadow_tester)
+
+            print(f"[Learning] Pattern learning engine ENABLED")
+            print(f"[Learning] Mode: PROPOSE-ONLY (human review required)")
+            print(f"[Learning] Shadow test size: {self.config.learning_shadow_test_size}")
+        else:
+            self.learning = None
+            self.shadow_tester = None
+            self.review_workflow = None
+
     async def process_turn(self, conversation_id: str, user_id: str, text: str, context: Dict[str, Any]):
         # Load conversation state if state management is enabled
         state = None
@@ -149,6 +181,9 @@ class LGDLRuntime:
         mv = None
         score = 0.0
         params = {}
+        match_stage = "slot_routing"  # Default when routing to awaiting slot
+        match_cost = 0.0
+        match = {"move": None, "score": 0.0, "params": {}}  # Default match object
 
         if state and state.awaiting_slot_for_move:
             # We're in the middle of slot-filling - route to the awaiting move
@@ -414,6 +449,9 @@ class LGDLRuntime:
 
         # Store turn in conversation history if state management is enabled
         if self.state_manager and state:
+            # Phase 3: Determine outcome for learning
+            outcome = self._determine_outcome(last_status, negotiation_result)
+
             turn = Turn(
                 turn_num=state.turn_count + 1,
                 timestamp=datetime.utcnow(),
@@ -422,7 +460,10 @@ class LGDLRuntime:
                 matched_move=mv["id"],
                 confidence=float(score),
                 response=response_acc,
-                extracted_params=params
+                extracted_params=params,
+                # Phase 3: Learning metadata
+                outcome=outcome,
+                negotiation_metadata=self._extract_negotiation_metadata(negotiation_result) if negotiation_result else None
             )
             updated_state = await self.state_manager.update(conversation_id, turn, extracted_params=params)
 
@@ -443,6 +484,19 @@ class LGDLRuntime:
                 await self.state_manager.persistent_storage.save_conversation(updated_state)
                 # Update cache
                 await self.state_manager.ephemeral_cache.set(f"persistent:{conversation_id}", updated_state)
+
+            # Phase 3: Learn from interaction (async, non-blocking)
+            if self.learning:
+                await self._learn_from_turn(
+                    conversation_id=conversation_id,
+                    user_input=text,
+                    matched_pattern=match.get("pattern"),
+                    matched_move=mv["id"],
+                    confidence=float(score),
+                    outcome=outcome,
+                    negotiation_result=negotiation_result,
+                    params=params
+                )
 
         return result
 
@@ -598,6 +652,93 @@ class LGDLRuntime:
             "final_confidence": round(result.final_confidence, 3),
             "reason": result.reason
         }
+
+    def _determine_outcome(self, last_status: str, negotiation_result) -> str:
+        """Determine interaction outcome for learning.
+
+        Args:
+            last_status: Action execution status ("ok" or "err")
+            negotiation_result: NegotiationResult if negotiation occurred
+
+        Returns:
+            Outcome string: "success", "failure", or "negotiation"
+        """
+        if negotiation_result:
+            # Had negotiation
+            return "success" if negotiation_result.success else "negotiation"
+
+        # No negotiation
+        return "success" if last_status == "ok" else "failure"
+
+    def _extract_negotiation_metadata(self, negotiation_result) -> Dict[str, Any]:
+        """Extract metadata from negotiation for learning.
+
+        Args:
+            negotiation_result: NegotiationResult
+
+        Returns:
+            Dict with negotiation data for learning
+        """
+        if not negotiation_result:
+            return None
+
+        return {
+            "success": negotiation_result.success,
+            "rounds": len(negotiation_result.rounds),
+            "final_confidence": negotiation_result.final_confidence,
+            "reason": negotiation_result.reason,
+            "final_params": negotiation_result.final_params
+        }
+
+    async def _learn_from_turn(
+        self,
+        conversation_id: str,
+        user_input: str,
+        matched_pattern: Optional[str],
+        matched_move: str,
+        confidence: float,
+        outcome: str,
+        negotiation_result,
+        params: Dict[str, Any]
+    ):
+        """Learn from completed turn (Phase 3).
+
+        Creates Interaction record and calls learning engine.
+        Runs async to not block response.
+
+        Args:
+            conversation_id: Conversation ID
+            user_input: User's input
+            matched_pattern: Pattern that matched
+            matched_move: Move that matched
+            confidence: Final confidence
+            outcome: "success", "failure", or "negotiation"
+            negotiation_result: NegotiationResult if negotiation occurred
+            params: Extracted parameters
+        """
+        from ..learning.engine import Interaction
+
+        # Build interaction record
+        interaction = Interaction(
+            timestamp=datetime.utcnow(),
+            conversation_id=conversation_id,
+            user_input=user_input,
+            matched_pattern=matched_pattern,
+            matched_move=matched_move,
+            confidence=confidence,
+            action_taken="respond",  # Could be more specific
+            outcome=outcome,
+            negotiation_rounds=len(negotiation_result.rounds) if negotiation_result else 0,
+            final_understanding=str(params) if negotiation_result and negotiation_result.success else None,
+            context={"params": params}
+        )
+
+        # Learn from interaction (async)
+        try:
+            await self.learning.learn_from_interaction(interaction)
+        except Exception as e:
+            # Don't fail turn if learning fails
+            print(f"[Learning] Error learning from interaction: {e}")
 
 def load_compiled_game(path: str):
     game = parse_lgdl(path)

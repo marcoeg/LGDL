@@ -29,6 +29,9 @@ class Turn:
     response: str
     extracted_params: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # Phase 3: Learning metadata
+    outcome: Optional[str] = None  # "success", "failure", "negotiation"
+    negotiation_metadata: Optional[Dict[str, Any]] = None  # NegotiationResult data
 
 
 @dataclass

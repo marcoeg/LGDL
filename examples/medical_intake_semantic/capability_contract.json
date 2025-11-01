@@ -1,0 +1,34 @@
+{
+  "name": "medical_intake_semantic_capabilities",
+  "version": "1.0.0",
+  "description": "Mock EHR capabilities for medical intake demo",
+  "capabilities": {
+    "ehr": {
+      "description": "Electronic Health Record integration",
+      "functions": {
+        "fetch_patient": {
+          "description": "Fetch patient record",
+          "request_schema": {
+            "type": "object",
+            "properties": {
+              "patient_id": {"type": "string"}
+            }
+          },
+          "timeout_ms": 2000
+        },
+        "create_visit": {
+          "description": "Create new patient visit",
+          "request_schema": {
+            "type": "object",
+            "properties": {
+              "pain_location": {"type": "string"},
+              "pain_severity": {"type": "number"},
+              "onset_timing": {"type": "string"}
+            }
+          },
+          "timeout_ms": 2000
+        }
+      }
+    }
+  }
+}
