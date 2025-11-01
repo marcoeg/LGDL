@@ -1,7 +1,7 @@
 [project]
 name = "lgdl-mvp"
-version = "0.1.0"
-description = "LGDL MVP: Lark grammar + runtime with optional OpenAI embeddings"
+version = "1.1.0-rc"
+description = "LGDL v1.1-RC: Language-Game Definition Language with semantic enhancement and learning"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
